@@ -13,13 +13,14 @@ jobs:
   cache:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      DOTNET_INSTALL_DIR: ${{ runner.temp }}/unoedit-dotnet
-      NUGET_PACKAGES: ${{ runner.temp }}/unoedit-packages
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Isolate SDK and package cache
+        run: |
+          echo "DOTNET_INSTALL_DIR=$RUNNER_TEMP/unoedit-dotnet" >> "$GITHUB_ENV"
+          echo "NUGET_PACKAGES=$RUNNER_TEMP/unoedit-packages" >> "$GITHUB_ENV"
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.401
@@ -50,6 +51,7 @@ jobs:
           EOF
           dotnet restore Probe.csproj
       - name: Archive only SDK binaries and package cache
+        if: always()
         shell: bash
         run: |
           mkdir -p artifacts
@@ -58,6 +60,7 @@ jobs:
           tar -czf artifacts/nuget-packages.tar.gz -C "$NUGET_PACKAGES" .
           sha256sum artifacts/*.tar.gz > artifacts/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: unoedit-offline-development-cache
           path: artifacts
