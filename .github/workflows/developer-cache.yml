@@ -1,0 +1,66 @@
+name: Developer dependency cache
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [port/unoedit]
+    paths: [.github/workflows/developer-cache.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_INSTALL_DIR: ${{ runner.temp }}/unoedit-dotnet
+      NUGET_PACKAGES: ${{ runner.temp }}/unoedit-packages
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.401
+      - name: Restore regression-suite dependencies
+        run: dotnet restore AvaloniaEdit.slnx
+      - name: Restore Uno and graphics dependencies
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/unoedit-probe"
+          cd "$RUNNER_TEMP/unoedit-probe"
+          cat > global.json <<'EOF'
+          { "sdk": { "version": "10.0.401", "rollForward": "latestPatch" }, "msbuild-sdks": { "Uno.Sdk": "6.7.30" } }
+          EOF
+          cat > Probe.csproj <<'EOF'
+          <Project Sdk="Uno.Sdk">
+            <PropertyGroup>
+              <TargetFramework>net10.0-desktop</TargetFramework>
+              <OutputType>Library</OutputType>
+              <UnoFeatures>Skia</UnoFeatures>
+              <IsPackable>false</IsPackable>
+            </PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="SkiaSharp.HarfBuzz" Version="3.119.2" />
+              <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="8.3.1.2" />
+              <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.2" />
+            </ItemGroup>
+          </Project>
+          EOF
+          dotnet restore Probe.csproj
+      - name: Archive only SDK binaries and package cache
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          dotnet --info > artifacts/toolchain.txt
+          tar -czf artifacts/dotnet-sdk.tar.gz -C "$DOTNET_INSTALL_DIR" .
+          tar -czf artifacts/nuget-packages.tar.gz -C "$NUGET_PACKAGES" .
+          sha256sum artifacts/*.tar.gz > artifacts/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unoedit-offline-development-cache
+          path: artifacts
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
