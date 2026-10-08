@@ -1,0 +1,65 @@
+name: Export development toolchain
+on:
+  push:
+    branches: [port/unoedit]
+    paths: [.github/workflows/cache-export.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 37841953856
+          name: unoedit-offline-development-cache
+          path: cache
+      - name: Prepare compact artifacts
+        shell: bash
+        run: |
+          mkdir -p packages feed
+          tar -xzf cache/nuget-packages.tar.gz -C packages --wildcards '*.nupkg'
+          find packages -name '*.nupkg' -exec cp '{}' feed/ \;
+          du -sh cache/* feed
+          tar -cf packages.tar -C feed .
+          split -d -b 300M packages.tar nuget.part-
+          sha256sum cache/dotnet-sdk.tar.gz nuget.part-* > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unoedit-dotnet-sdk
+          path: |
+            cache/dotnet-sdk.tar.gz
+            SHA256SUMS.txt
+          compression-level: 0
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unoedit-nuget-00
+          path: nuget.part-00
+          compression-level: 0
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unoedit-nuget-01
+          path: nuget.part-01
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unoedit-nuget-02
+          path: nuget.part-02
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unoedit-nuget-03
+          path: nuget.part-03
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: ignore
