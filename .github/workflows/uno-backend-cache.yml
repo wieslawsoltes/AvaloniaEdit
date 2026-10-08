@@ -1,0 +1,67 @@
+name: Uno backend dependency validation
+on:
+  push:
+    branches: [port/unoedit]
+    paths: [.github/workflows/uno-backend-cache.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.401
+      - name: Restore library dependencies
+        shell: bash
+        run: |
+          mkdir -p probe
+          cd probe
+          echo '{"msbuild-sdks":{"Uno.Sdk":"6.7.30"}}' > global.json
+          cat > Probe.csproj <<'EOF'
+          <Project Sdk="Uno.Sdk">
+            <PropertyGroup><TargetFramework>net10.0-desktop</TargetFramework><OutputType>Library</OutputType><UnoFeatures>Skia</UnoFeatures></PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="SkiaSharp.HarfBuzz" Version="3.119.2" />
+              <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="8.3.1.2" />
+              <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.2" />
+            </ItemGroup>
+          </Project>
+          EOF
+          dotnet restore
+          find "$HOME/.nuget/packages" -name '*.nupkg' -printf '%f\n' | sort > ../baseline.txt
+      - name: Restore desktop host and shaped text
+        shell: bash
+        run: |
+          cd probe
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Probe.csproj')
+          p.write_text(p.read_text().replace('<OutputType>Library</OutputType>', '<OutputType>Exe</OutputType>').replace('</ItemGroup>', '<PackageReference Include="Topten.RichTextKit" Version="0.5.168" /></ItemGroup>'))
+          PY
+          dotnet restore
+      - name: Archive new backend dependencies
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          known=set(Path('baseline.txt').read_text().splitlines())
+          dst=Path('extra'); dst.mkdir()
+          for p in Path.home().joinpath('.nuget/packages').rglob('*.nupkg'):
+            if p.name not in known: shutil.copy2(p,dst/p.name)
+          PY
+          tar -czf uno-backend-packages.tar.gz -C extra .
+          sha256sum uno-backend-packages.tar.gz > SHA256SUMS.txt
+          du -sh uno-backend-packages.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unoedit-backend-dependencies
+          path: |
+            uno-backend-packages.tar.gz
+            SHA256SUMS.txt
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
