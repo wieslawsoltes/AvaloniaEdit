@@ -13,7 +13,7 @@ namespace UnoEdit.Rendering;
 /// Native Uno drawing surface. It shares the document-backed editing session
 /// with TextArea and draws directly into Uno's existing Skia canvas.
 /// </summary>
-public class TextView : SKCanvasElement
+public class TextView : SKCanvasElement, IDisposable
 {
     private readonly bool _ownsSession;
     private bool _drawCaret;
@@ -89,20 +89,20 @@ public class TextView : SKCanvasElement
         ScrollOffsetChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    protected override void Dispose(bool disposing)
+    // Uno 6.7 FrameworkElement.Dispose is nonvirtual. Reimplement IDisposable
+    // so both concrete and interface calls release the owned editor resources.
+    public new void Dispose()
     {
-        if (disposing && !_disposed)
-        {
-            _disposed = true;
-            SizeChanged -= OnSizeChanged;
-            Session.Changed -= OnSessionChanged;
-            Viewport.Invalidated -= OnViewportInvalidated;
-            Viewport.Dispose();
-            if (_ownsSession) Session.Dispose();
-            VisualLinesChanged = null;
-            ScrollOffsetChanged = null;
-            Rendered = null;
-        }
-        base.Dispose(disposing);
+        if (_disposed) return;
+        _disposed = true;
+        SizeChanged -= OnSizeChanged;
+        Session.Changed -= OnSessionChanged;
+        Viewport.Invalidated -= OnViewportInvalidated;
+        Viewport.Dispose();
+        if (_ownsSession) Session.Dispose();
+        VisualLinesChanged = null;
+        ScrollOffsetChanged = null;
+        Rendered = null;
+        base.Dispose();
     }
 }
