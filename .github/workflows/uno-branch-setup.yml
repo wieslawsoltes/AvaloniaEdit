@@ -1,4 +1,4 @@
-name: UnoEdit branch configuration
+name: UnoEdit repository diagnostics
 
 on:
   push:
@@ -7,36 +7,27 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: read
+  checks: read
 
 jobs:
-  configure:
+  diagnose:
     if: github.repository == 'wieslawsoltes/AvaloniaEdit' && github.ref == 'refs/heads/port/unoedit'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Set the explicitly requested default branch
-        id: default
-        continue-on-error: true
+      - name: Report repository and Pages configuration
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          current=$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)
-          echo "Current default branch: $current"
-          if [ "$current" != 'port/unoedit' ]; then
-            # Only the user-requested default_branch field is changed. This
-            # token may lack Administration write; do not weaken any policy
-            # or search for a different credential when GitHub rejects it.
-            gh api --method PATCH "repos/$GITHUB_REPOSITORY" -f default_branch='port/unoedit' --jq .default_branch
-          fi
-      - name: Verify branch and Pages settings
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DEFAULT_RESULT: ${{ steps.default.outcome }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY" --jq '{default_branch,has_pages}'
           gh api "repos/$GITHUB_REPOSITORY/pages" --jq '{html_url,build_type,status,source}'
-          if [ "$DEFAULT_RESULT" != 'success' ]; then
-            echo '::warning::Default branch update was rejected by GitHub. Set Settings > General > Default branch to port/unoedit with a repository administrator account.'
-          fi
+      - name: Report failed deployment annotations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # This deployment failed before runner logs were created. Check-run
+          # annotations explain the environment policy without modifying it.
+          gh api "repos/$GITHUB_REPOSITORY/check-runs/113845954617/annotations" --jq '.[] | {message,title,annotation_level}'
+          echo 'Default branch update was attempted in run 37937609916 and rejected with HTTP 403. No administrative or environment policy was changed.'
