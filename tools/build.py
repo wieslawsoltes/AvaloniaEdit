@@ -15,7 +15,9 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
+from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACTS = ROOT / 'artifacts'
@@ -28,9 +30,9 @@ TESTS = {
 PACKAGES = ['UnoEdit.Core', 'UnoEdit.Rendering.Skia', 'UnoEdit.Uno']
 
 
-def run(*args: str) -> None:
+def run(*args: str, cwd: Path = ROOT) -> None:
     print('+ ' + ' '.join(args), flush=True)
-    subprocess.run(args, cwd=ROOT, check=True)
+    subprocess.run(args, cwd=cwd, check=True)
 
 
 def check_test_result(result: Path) -> dict:
@@ -55,7 +57,7 @@ def test(name: str, configuration: str) -> None:
     run('dotnet', 'test', TESTS[name], '-c', configuration,
         '--logger', f'trx;LogFileName={trx.name}', '--results-directory', str(destination))
     summary = check_test_result(trx)
-    (destination / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+    (destination / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n', encoding='utf-8')
 
 
 def prepare_site() -> None:
@@ -71,9 +73,9 @@ def prepare_site() -> None:
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     (destination / 'build.json').write_text(json.dumps({
         'name': 'UnoEdit', 'status': 'preview', 'revision': revision,
-        'toolchain': json.loads((ROOT / 'global.json').read_text()),
+        'toolchain': json.loads((ROOT / 'global.json').read_text(encoding='utf-8')),
         'fullApiParity': False,
-    }, indent=2) + '\n')
+    }, indent=2) + '\n', encoding='utf-8')
     print(f'Pages site prepared in {destination}', flush=True)
 
 
@@ -86,12 +88,110 @@ def checksums(directory: Path) -> None:
                 for chunk in iter(lambda: stream.read(1024 * 1024), b''):
                     digest.update(chunk)
             lines.append(f'{digest.hexdigest()}  {file.name}')
-    (directory / 'SHA256SUMS.txt').write_text('\n'.join(lines) + '\n')
+    (directory / 'SHA256SUMS.txt').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+
+def validate_packages(directory: Path, version: str) -> list[dict]:
+    """Reject stale/missing packages, incorrect dependencies and baseline leakage."""
+    packages = sorted(directory.glob('*.nupkg'))
+    if len(packages) != len(PACKAGES):
+        raise RuntimeError(f'Expected {len(PACKAGES)} native packages; found {packages}')
+    found = set()
+    summary = []
+    for path in packages:
+        with ZipFile(path) as package:
+            names = package.namelist()
+            specs = [name for name in names if name.endswith('.nuspec')]
+            if len(specs) != 1:
+                raise RuntimeError(f'Invalid package manifest in {path}')
+            root = ET.fromstring(package.read(specs[0]))
+            metadata = root.find('{*}metadata')
+            if metadata is None:
+                raise RuntimeError(f'Missing metadata in {path}')
+            identifier = metadata.findtext('{*}id')
+            actual_version = metadata.findtext('{*}version')
+            if identifier not in PACKAGES or identifier in found or actual_version != version:
+                raise RuntimeError(f'Unexpected package identity: {identifier} {actual_version}')
+            found.add(identifier)
+            if metadata.findtext('{*}readme') != 'README.md' or 'README.md' not in names:
+                raise RuntimeError(f'Missing compatibility README in {identifier}')
+            if not any(name.startswith('lib/') and name.endswith('.dll') for name in names):
+                raise RuntimeError(f'Package contains no compiled library: {identifier}')
+            native_dependencies = set()
+            for dependency in metadata.findall('.//{*}dependency'):
+                name = dependency.get('id', '')
+                if name.casefold().startswith('avalonia'):
+                    raise RuntimeError(f'Native package {identifier} depends on the Avalonia baseline: {name}')
+                if name in PACKAGES:
+                    minimum = dependency.get('version', '').split(',')[0].strip('[]() ')
+                    if minimum != version:
+                        raise RuntimeError(f'Native package version mismatch: {identifier} -> {name} {minimum}, expected {version}')
+                    native_dependencies.add(name)
+            required = {
+                'UnoEdit.Core': set(),
+                'UnoEdit.Rendering.Skia': {'UnoEdit.Core'},
+                'UnoEdit.Uno': {'UnoEdit.Core', 'UnoEdit.Rendering.Skia'},
+            }[identifier]
+            if not required.issubset(native_dependencies):
+                raise RuntimeError(f'Missing native dependencies in {identifier}: {required - native_dependencies}')
+        symbols = path.with_suffix('.snupkg')
+        if not symbols.is_file():
+            raise RuntimeError(f'Missing symbol package: {symbols}')
+        with ZipFile(symbols) as package:
+            if not any(name.endswith('.pdb') for name in package.namelist()):
+                raise RuntimeError(f'Symbol package has no portable PDB: {symbols}')
+        summary.append({'id': identifier, 'version': actual_version, 'dependencies': sorted(native_dependencies)})
+    return summary
+
+
+def verify_package_consumer(directory: Path, version: str, configuration: str) -> None:
+    """Build outside the source tree, using only the newly packed NuGet binaries."""
+    with tempfile.TemporaryDirectory(prefix='unoedit-package-consumer-') as temporary:
+        consumer = Path(temporary)
+        shutil.copy2(ROOT / 'global.json', consumer / 'global.json')
+        (consumer / 'Consumer.csproj').write_text(f'''<Project Sdk="Uno.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-desktop;net10.0-browserwasm</TargetFrameworks>
+    <OutputType>Library</OutputType>
+    <UnoFeatures>SkiaRenderer</UnoFeatures>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup><PackageReference Include="UnoEdit.Uno" Version="{version}" /></ItemGroup>
+</Project>
+''', encoding='utf-8')
+        (consumer / 'Consumer.cs').write_text('''using UnoEdit;
+using UnoEdit.Document;
+using UnoEdit.Editing;
+using UnoEdit.Highlighting;
+
+public static class PackageConsumer
+{
+    public static TextEditor Create()
+    {
+        var editor = new TextEditor
+        {
+            Text = "class PackagedConsumer { }",
+            ShowLineNumbers = true,
+            SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("C#")
+        };
+        editor.TextArea.ReadOnlySectionProvider =
+            new TextSegmentReadOnlySectionProvider<TextSegment>(editor.Document);
+        editor.Select(0, 5);
+        editor.TextArea.ReplaceSelectionWithText("struct");
+        return editor;
+    }
+}
+''', encoding='utf-8')
+        run('dotnet', 'restore', 'Consumer.csproj', '--source', str(directory.resolve()),
+            '--source', 'https://api.nuget.org/v3/index.json', cwd=consumer)
+        for framework in ('net10.0-desktop', 'net10.0-browserwasm'):
+            run('dotnet', 'build', 'Consumer.csproj', '-c', configuration, '-f', framework, '--no-restore', cwd=consumer)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('target', choices=['all', 'test', 'core', 'rendering', 'baseline', 'desktop', 'browser', 'pack', 'site'])
+    parser.add_argument('target', choices=['all', 'test', 'core', 'rendering', 'baseline', 'desktop', 'browser', 'pack', 'site', 'verify-packages'])
     parser.add_argument('--configuration', default='Release', choices=['Debug', 'Release'])
     parser.add_argument('--version', default='0.1.0-alpha.1')
     parser.add_argument('--base-path', default='/AvaloniaEdit/')
@@ -123,13 +223,22 @@ def main() -> None:
         prepare_site()
     if args.target == 'site':
         prepare_site()
-    if args.target in ('all', 'pack'):
+    if args.target in ('all', 'pack', 'verify-packages'):
         destination = ARTIFACTS / 'packages'
-        destination.mkdir(parents=True, exist_ok=True)
-        for name in PACKAGES:
-            run('dotnet', 'pack', f'src/{name}/{name}.csproj', '-c', args.configuration,
-                f'-p:Version={args.version}', f'-p:PackageVersion={args.version}', '-o', str(destination))
+        if args.target != 'verify-packages':
+            if destination.exists():
+                shutil.rmtree(destination)
+            destination.mkdir(parents=True)
+            for name in PACKAGES:
+                run('dotnet', 'pack', f'src/{name}/{name}.csproj', '-c', args.configuration,
+                    f'-p:Version={args.version}', f'-p:PackageVersion={args.version}', '-o', str(destination))
+        summary = validate_packages(destination, args.version)
+        verify_package_consumer(destination, args.version, args.configuration)
+        (destination / 'validation.json').write_text(json.dumps({
+            'packages': summary, 'independentConsumerBuilds': ['net10.0-desktop', 'net10.0-browserwasm']
+        }, indent=2) + '\n', encoding='utf-8')
         checksums(destination)
+        print('All three native packages, symbols and independent desktop/browser consumers validated.', flush=True)
 
 
 if __name__ == '__main__':
