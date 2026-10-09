@@ -16,7 +16,7 @@ using Windows.UI.Core;
 namespace UnoEdit.Editing;
 
 /// <summary>Native Uno input and scroll host over the shared document engine.</summary>
-public class TextArea : UserControl
+public class TextArea : UserControl, IDisposable
 {
     private readonly ScrollBar _vertical = new() { Orientation = Orientation.Vertical, Width = 14 };
     private readonly ScrollBar _horizontal = new() { Orientation = Orientation.Horizontal, Height = 14 };
@@ -63,7 +63,7 @@ public class TextArea : UserControl
         LostFocus += (_, _) => { _focused = false; TextView.DrawCaret = false; _caretTimer.Stop(); _pendingHighSurrogate = null; };
         Loaded += (_, _) => { if (_disposed) return; if (_focused) _caretTimer.Start(); TextView.Redraw(); };
         Unloaded += (_, _) => { _caretTimer.Stop(); _selecting = false; TextView.ReleasePointerCaptures(); };
-        _caretTimer.Tick += (_, _) => TextView.DrawCaret = _focused && !TextView.DrawCaret;
+        _caretTimer.Tick += OnCaretTimerTick;
         var menu = new MenuFlyout();
         AddMenuCommand(menu, "Undo", () => { Session.Undo(); return Task.CompletedTask; });
         AddMenuCommand(menu, "Redo", () => { Session.Redo(); return Task.CompletedTask; });
@@ -239,6 +239,11 @@ public class TextArea : UserControl
         e.Handled = true;
     }
 
+    private void OnCaretTimerTick(object sender, object args)
+    {
+        if (!_disposed) TextView.DrawCaret = _focused && !TextView.DrawCaret;
+    }
+
     private void OnSessionChanged(object sender, EventArgs e)
     {
         if (_disposed) return;
@@ -289,23 +294,28 @@ public class TextArea : UserControl
         InputError?.Invoke(this, error);
     }
 
-    protected override void Dispose(bool disposing)
+    // Uno 6.7 has a nonvirtual FrameworkElement.Dispose method. The explicit
+    // interface implementation is inherited from this reimplementation.
+    public new void Dispose()
     {
-        if (disposing && !_disposed)
-        {
-            _disposed = true;
-            _caretTimer.Stop();
-            TextView.ReleasePointerCaptures();
-            KeyDown -= OnEditorKeyDown;
-            CharacterReceived -= OnCharacterReceived;
-            Session.Changed -= OnSessionChanged;
-            TextView.Dispose();
-            Session.Dispose();
-            SelectionChanged = null;
-            SearchRequested = null;
-            InputError = null;
-        }
-        base.Dispose(disposing);
+        if (_disposed) return;
+        _disposed = true;
+        _caretTimer.Stop();
+        _caretTimer.Tick -= OnCaretTimerTick;
+        TextView.ReleasePointerCaptures();
+        KeyDown -= OnEditorKeyDown;
+        CharacterReceived -= OnCharacterReceived;
+        Session.Changed -= OnSessionChanged;
+        TextView.PointerPressed -= OnPointerPressed;
+        TextView.PointerMoved -= OnPointerMoved;
+        TextView.PointerReleased -= OnPointerReleased;
+        TextView.PointerWheelChanged -= OnPointerWheelChanged;
+        TextView.Dispose();
+        Session.Dispose();
+        SelectionChanged = null;
+        SearchRequested = null;
+        InputError = null;
+        base.Dispose();
     }
 }
 
