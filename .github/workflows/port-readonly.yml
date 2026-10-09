@@ -1,0 +1,91 @@
+name: Validate native protected editing
+
+on:
+  push:
+    branches: [port/unoedit]
+    paths: ['.github/workflows/port-readonly.yml', 'tools/port-readonly.py', 'tools/refine-readonly-input.py']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: unoedit-readonly-migration
+  cancel-in-progress: true
+
+jobs:
+  migrate:
+    if: github.repository == 'wieslawsoltes/AvaloniaEdit' && github.ref == 'refs/heads/port/unoedit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Apply exact source migration
+        run: |
+          python3 tools/port-readonly.py
+          python3 tools/refine-readonly-input.py
+          git add src test
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'port: share original protected-section providers and enforce them in native Uno editing'
+          fi
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/source-revision.txt
+      - name: Run complete original, core and renderer regressions
+        run: python3 tools/build.py test
+      - name: Install browser workload
+        run: dotnet workload install wasm-tools --skip-manifest-update
+      - name: Build native Uno desktop app
+        run: |
+          dotnet build src/UnoEdit.Uno.Demo/UnoEdit.Uno.Demo.csproj -c Release -f net10.0-desktop -bl:artifacts/desktop.binlog > artifacts/desktop.log 2>&1 || { tail -100 artifacts/desktop.log; exit 1; }
+          tail -10 artifacts/desktop.log
+      - name: Exercise native Uno controls on Linux
+        env:
+          UNOEDIT_NATIVE_CHECKS: '1'
+        run: |
+          xvfb-run -a timeout 90s dotnet run --project src/UnoEdit.Uno.Demo/UnoEdit.Uno.Demo.csproj -c Release -f net10.0-desktop --no-build > artifacts/native-runtime.log 2>&1 || { tail -100 artifacts/native-runtime.log; exit 1; }
+          cat artifacts/native-runtime.log
+      - name: Publish native browser app
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: |
+          python3 tools/build.py browser --base-path "/$REPOSITORY_NAME/" > artifacts/browser.log 2>&1 || { tail -100 artifacts/browser.log; exit 1; }
+          tail -10 artifacts/browser.log
+      - name: Verify real browser input and protected-region checks
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: |
+          npm install --prefix tools --no-save --package-lock=false playwright@1.64.0
+          tools/node_modules/.bin/playwright install --with-deps chromium > artifacts/playwright-install.log 2>&1
+          node tools/browser-smoke.mjs artifacts/site "$REPOSITORY_NAME"
+      - name: Push validated source without overwriting concurrent changes
+        run: git push origin HEAD:refs/heads/port/unoedit
+      - name: Preserve exact patch and diagnostic evidence
+        if: always()
+        env:
+          START_REVISION: ${{ github.sha }}
+        run: |
+          mkdir -p artifacts
+          git diff "$START_REVISION" -- src test > artifacts/readonly.patch
+          test ! -f artifacts/browser-tests/failure-state.json || cat artifacts/browser-tests/failure-state.json
+          test ! -f artifacts/browser-tests/console.log || tail -80 artifacts/browser-tests/console.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: unoedit-protected-editing-validation
+          path: |
+            artifacts/tests
+            artifacts/browser-tests
+            artifacts/*.log
+            artifacts/*.binlog
+            artifacts/*.patch
+            artifacts/*.txt
+          if-no-files-found: error
+          retention-days: 14
