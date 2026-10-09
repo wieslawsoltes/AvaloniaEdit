@@ -89,6 +89,18 @@ public class TextArea : UserControl, IDisposable
         }
     }
     public bool IsReadOnly { get => Session.IsReadOnly; set => Session.IsReadOnly = value; }
+    /// <summary>Gets or sets the original provider controlling editable document sections.</summary>
+    public IReadOnlySectionProvider ReadOnlySectionProvider
+    {
+        get => Session.ReadOnlySectionProvider;
+        set => Session.ReadOnlySectionProvider = value;
+    }
+    /// <summary>Clears the selection while preserving the active caret.</summary>
+    public void ClearSelection() => Session.MoveTo(Session.CaretOffset);
+    /// <summary>Replaces only editable ranges, preserving protected document content.</summary>
+    public void ReplaceSelectionWithText(string text) => Session.ReplaceSelection(text);
+    /// <summary>Removes only editable ranges in the current selection.</summary>
+    public void RemoveSelectedText() => Session.ReplaceSelection(string.Empty);
     public event EventHandler SelectionChanged;
     public event EventHandler SearchRequested;
     public event EventHandler<Exception> InputError;

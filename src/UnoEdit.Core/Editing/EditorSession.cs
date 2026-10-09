@@ -10,7 +10,7 @@ namespace UnoEdit.Editing;
 /// Unicode text elements and never splits a CRLF delimiter. No operation copies
 /// the complete document except an explicitly requested complete selection.
 /// </summary>
-public sealed class EditorSession : IDisposable
+public sealed partial class EditorSession : IDisposable
 {
     private TextDocument _document;
     private int _anchor;
@@ -71,27 +71,7 @@ public sealed class EditorSession : IDisposable
 
     public void SelectAll() => Select(0, _document.TextLength);
 
-    public void ReplaceSelection(string text)
-    {
-        ThrowIfDisposed();
-        if (text == null) throw new ArgumentNullException(nameof(text));
-        if (IsReadOnly) return;
-        var start = SelectionStart;
-        var length = SelectionLength;
-        if (length == 0 && text.Length == 0) return;
-        _transaction++;
-        try
-        {
-            _document.Replace(start, length, text);
-            _anchor = _caret = start + text.Length;
-            _changed = true;
-        }
-        finally
-        {
-            _transaction--;
-            if (_transaction == 0 && _changed) NotifyChanged();
-        }
-    }
+    public void ReplaceSelection(string text) => ReplaceProtectedSelection(text);
 
     public void MoveHorizontal(int direction, bool extendSelection = false, bool byWord = false)
     {
@@ -140,18 +120,7 @@ public sealed class EditorSession : IDisposable
         MoveTo(end ? line.EndOffset : line.Offset, extendSelection);
     }
 
-    public void Delete(bool backwards, bool byWord = false)
-    {
-        ThrowIfDisposed();
-        if (IsReadOnly) return;
-        if (SelectionLength == 0)
-        {
-            var previous = _caret;
-            MoveHorizontal(backwards ? -1 : 1, true, byWord);
-            if (_caret == previous) return;
-        }
-        ReplaceSelection(string.Empty);
-    }
+    public void Delete(bool backwards, bool byWord = false) => DeleteProtected(backwards, byWord);
 
     public void Enter()
     {
@@ -181,38 +150,7 @@ public sealed class EditorSession : IDisposable
             ReplaceSelection(Options.ConvertTabsToSpaces ? new string(' ', indentationSize - column % indentationSize) : "\t");
             return;
         }
-        var first = _document.GetLineByOffset(SelectionStart).LineNumber;
-        var end = SelectionStart + SelectionLength;
-        var lastLine = _document.GetLineByOffset(end);
-        var last = lastLine.LineNumber;
-        if (SelectionLength > 0 && lastLine.Offset == end && last > first) last--;
-        _transaction++;
-        try
-        {
-            using (_document.RunUpdate())
-            {
-                for (var number = last; number >= first; number--)
-                {
-                    var line = _document.GetLineByNumber(number);
-                    if (!backwards)
-                    {
-                        _document.Insert(line.Offset, Options.ConvertTabsToSpaces ? new string(' ', indentationSize) : "\t");
-                    }
-                    else if (line.Length > 0)
-                    {
-                        var count = 0;
-                        if (_document.GetCharAt(line.Offset) == '\t') count = 1;
-                        else while (count < line.Length && count < indentationSize && _document.GetCharAt(line.Offset + count) == ' ') count++;
-                        if (count != 0) _document.Remove(line.Offset, count);
-                    }
-                }
-            }
-        }
-        finally
-        {
-            _transaction--;
-            if (_transaction == 0 && _changed) NotifyChanged();
-        }
+        IndentProtectedLines(backwards, indentationSize);
     }
 
     public void Undo()

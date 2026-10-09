@@ -68,6 +68,7 @@ internal static class NativeControlChecks
         checks.Add("Concrete and IDisposable cleanup are idempotent and release owned resources");
         checks.AddRange(NativeHighlightingChecks.Run());
         checks.AddRange(LegacyHighlightingChecks.Run());
+        checks.AddRange(NativeReadOnlyChecks.Run());
         return checks.ToArray();
     }
 

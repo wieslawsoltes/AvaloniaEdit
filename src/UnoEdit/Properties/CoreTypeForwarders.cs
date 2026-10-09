@@ -56,3 +56,5 @@
 [assembly: System.Runtime.CompilerServices.TypeForwardedTo(typeof(global::UnoEdit.Utils.ServiceExtensions))]
 [assembly: System.Runtime.CompilerServices.TypeForwardedTo(typeof(global::UnoEdit.Utils.StringSegment))]
 [assembly: System.Runtime.CompilerServices.TypeForwardedTo(typeof(global::UnoEdit.Utils.WeakEventManagerBase<,,,>))]
+[assembly: System.Runtime.CompilerServices.TypeForwardedTo(typeof(global::UnoEdit.Editing.IReadOnlySectionProvider))]
+[assembly: System.Runtime.CompilerServices.TypeForwardedTo(typeof(global::UnoEdit.Editing.TextSegmentReadOnlySectionProvider<>))]
