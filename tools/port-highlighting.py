@@ -41,10 +41,13 @@ using FontWeights = Microsoft.UI.Text.FontWeights;''')
     text = re.sub(r'\bImmutableSolidColorBrush\b', 'SolidColorBrush', text)
     text = re.sub(r'\bIBrush\b', 'Brush', text)
     text = text.replace('FontFamily.Name', 'FontFamily.Source')
-    text = text.replace('FontWeight.Value.ToString().ToLowerInvariant()', 'FontWeight.Value.Weight.ToString(CultureInfo.InvariantCulture)')
+    text = text.replace('FontWeight.Value.ToString().ToLowerInvariant()', 'FontWeight.Value.Weight.ToString(System.Globalization.CultureInfo.InvariantCulture)')
     text = text.replace('_fontWeight == other._fontWeight', 'Nullable.Equals(_fontWeight, other._fontWeight)')
     text = text.replace('Color.Parse(color)', 'NativeHighlightingConversions.ParseColor(color)')
     text = text.replace('(FontWeight)Enum.Parse(typeof(FontWeight), fontWeight, ignoreCase: true)', 'NativeHighlightingConversions.ParseFontWeight(fontWeight)')
+    # Capacity-only overload is internal to Core; the public constructor plus
+    # the same two map entries preserves the original transformation exactly.
+    text = text.replace('new OffsetChangeMap(2)', 'new OffsetChangeMap()')
     for weight in ('Thin', 'ExtraLight', 'UltraLight', 'Light', 'SemiLight', 'Normal', 'Regular', 'Medium', 'DemiBold', 'SemiBold', 'Bold', 'ExtraBold', 'UltraBold', 'Black', 'Heavy', 'ExtraBlack', 'UltraBlack'):
         text = text.replace('FontWeight.' + weight, 'FontWeights.' + weight)
     return text
@@ -69,8 +72,6 @@ def main():
                     raise RuntimeError(f'Unported dependency in {path}')
             write(DEST / path.relative_to(SOURCE), text)
             files.append(path.relative_to(SOURCE).as_posix())
-        # Internal original helpers are private to the signed core. Preserve
-        # implementations in a private namespace; do not weaken core signing.
         for name in ('CompressingTreeList.cs', 'BusyManager.cs', 'IFreezable.cs', 'NullSafeCollection.cs', 'ThrowUtil.cs', 'CallbackOnDispose.cs'):
             path = ROOT / 'src/UnoEdit.Core/Utils' / name
             text = native(path.read_text(encoding='utf-8-sig'))
