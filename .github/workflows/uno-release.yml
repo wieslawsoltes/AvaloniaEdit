@@ -1,0 +1,127 @@
+name: UnoEdit prerelease
+
+on:
+  push:
+    tags: ['unoedit-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uno-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Validate prerelease version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#unoedit-v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$ ]]; then
+            echo 'The port is not API-complete. Use an explicit prerelease tag, for example unoedit-v0.1.0-alpha.1.' >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Test every existing regression suite
+        run: python3 tools/build.py test
+      - name: Build desktop and publish browser
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: |
+          dotnet workload install wasm-tools --skip-manifest-update
+          python3 tools/build.py desktop
+          python3 tools/build.py browser --base-path "/$REPOSITORY_NAME/"
+      - name: Validate real browser input
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: |
+          npm install --prefix tools --no-save --package-lock=false playwright@1.64.0
+          tools/node_modules/.bin/playwright install --with-deps chromium
+          node tools/browser-smoke.mjs artifacts/browser "$REPOSITORY_NAME"
+      - name: Build native packages with a consistent version
+        run: python3 tools/build.py pack --version "$VERSION"
+      - name: Assemble release files and checksums
+        shell: bash
+        run: |
+          mkdir -p artifacts/release
+          cp artifacts/packages/*.nupkg artifacts/packages/*.snupkg artifacts/release/
+          git archive --format=zip --output=artifacts/release/UnoEdit-source.zip HEAD
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, shutil, subprocess
+          root = Path('artifacts/release')
+          shutil.make_archive(str(root / 'UnoEdit-browser'), 'zip', 'artifacts/site')
+          (root / 'SOURCE_REVISION.txt').write_text(subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True))
+          checksums = []
+          for path in sorted(root.iterdir()):
+              digest = hashlib.sha256()
+              with path.open('rb') as stream:
+                  for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                      digest.update(chunk)
+              checksums.append(f'{digest.hexdigest()}  {path.name}')
+          (root / 'SHA256SUMS.txt').write_text('\n'.join(checksums) + '\n')
+          PY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: unoedit-release-files
+          path: artifacts/release
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: unoedit-release-validation
+          path: |
+            artifacts/tests
+            artifacts/browser-tests
+            artifacts/*.binlog
+          if-no-files-found: warn
+          retention-days: 14
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: unoedit-release-files
+          path: release
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cat > notes.md <<'EOF'
+          Native UnoEdit migration preview. This is not yet a full public-API-compatible replacement for AvaloniaEdit.
+
+          Includes the original document engine, native Uno controls, shaped Skia viewport, source, NuGet packages and browser sample. The release gate executes the original regression suite, independent core/rendering tests and real browser input tests.
+
+          Completion/snippet APIs, TextMate integration, original rendering extensions, complete IME/accessibility and other parity work remain. See docs/uno-port.md in the source archive for migration status and build instructions.
+          EOF
+          gh release create "$GITHUB_REF_NAME" release/* --repo "$GH_REPO" --verify-tag --prerelease --title "UnoEdit ${GITHUB_REF_NAME#unoedit-v}" --notes-file notes.md
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.401
+      - name: Publish NuGet packages when a package key is configured
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        shell: bash
+        run: |
+          if [[ -z "$NUGET_API_KEY" ]]; then
+            echo 'NUGET_API_KEY is not configured; verified packages are attached to the GitHub release.'
+            exit 0
+          fi
+          dotnet nuget push 'release/*.nupkg' --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
