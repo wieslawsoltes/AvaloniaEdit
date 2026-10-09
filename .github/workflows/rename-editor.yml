@@ -24,17 +24,19 @@ jobs:
       - name: Rename editor identities and preserve source
         run: |
           python3 tools/rename-editor.py
-          git add src test '*.slnx' '*.sln'
+          git add -A
+      - name: Build renamed baseline
+        run: dotnet build UnoEdit.slnx -c Release
+      - name: Run all renamed regression tests
+        run: dotnet test test/UnoEdit.Tests/UnoEdit.Tests.csproj -c Release --no-build --logger 'trx;LogFileName=identity.trx' --results-directory artifacts/test-results
+      - name: Commit validated source changes
+        run: |
           if ! git diff --cached --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git commit -m 'refactor: rename every editor project, namespace, resource and test to UnoEdit'
             git push origin HEAD:refs/heads/port/unoedit
           fi
-      - name: Build renamed baseline
-        run: dotnet build UnoEdit.slnx -c Release
-      - name: Run all renamed regression tests
-        run: dotnet test test/UnoEdit.Tests/UnoEdit.Tests.csproj -c Release --no-build --logger 'trx;LogFileName=identity.trx' --results-directory artifacts/test-results
       - name: Export exact renamed source
         if: always()
         run: |
