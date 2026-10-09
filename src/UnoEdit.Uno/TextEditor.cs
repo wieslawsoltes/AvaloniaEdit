@@ -18,7 +18,7 @@ namespace UnoEdit;
 /// The migration baseline remains separately buildable until the remaining
 /// completion, snippet, folding-adornment and extension APIs are ported.
 /// </summary>
-public class TextEditor : UserControl, IDisposable
+public class TextEditor : UserControl
 {
     private readonly long[] _appearanceCallbacks;
     private readonly DependencyProperty[] _appearanceProperties;
@@ -29,7 +29,7 @@ public class TextEditor : UserControl, IDisposable
     public static readonly DependencyProperty OptionsProperty = DependencyProperty.Register(
         nameof(Options), typeof(TextEditorOptions), typeof(TextEditor), new PropertyMetadata(null, (sender, args) => ((TextEditor)sender).ChangeOptions((TextEditorOptions)args.OldValue, (TextEditorOptions)args.NewValue)));
     public static readonly DependencyProperty IsReadOnlyProperty = DependencyProperty.Register(
-        nameof(IsReadOnly), typeof(bool), typeof(TextEditor), new PropertyMetadata(false, (sender, args) => ((TextEditor)sender).TextArea.IsReadOnly = (bool)args.NewValue));
+        nameof(IsReadOnly), typeof(bool), typeof(TextEditor), new PropertyMetadata(false, (sender, _) => ((TextEditor)sender).UpdateReadOnly()));
     public static readonly DependencyProperty ShowLineNumbersProperty = DependencyProperty.Register(
         nameof(ShowLineNumbers), typeof(bool), typeof(TextEditor), new PropertyMetadata(false, (sender, _) => ((TextEditor)sender).RefreshAppearance()));
     public static readonly DependencyProperty WordWrapProperty = DependencyProperty.Register(
@@ -49,7 +49,7 @@ public class TextEditor : UserControl, IDisposable
         _appearanceCallbacks = new long[_appearanceProperties.Length];
         for (var i = 0; i < _appearanceProperties.Length; i++)
             _appearanceCallbacks[i] = RegisterPropertyChangedCallback(_appearanceProperties[i], (_, _) => RefreshAppearance());
-        ActualThemeChanged += (_, _) => RefreshAppearance();
+        ActualThemeChanged += OnActualThemeChanged;
         Options = new TextEditorOptions();
         Document = new TextDocument();
         RefreshAppearance();
@@ -79,7 +79,12 @@ public class TextEditor : UserControl, IDisposable
     public int SelectionStart
     {
         get => TextArea.Session.SelectionStart;
-        set => TextArea.Session.Select(value, Math.Min(SelectionLength, GetDocument().TextLength - value));
+        set
+        {
+            var document = GetDocument();
+            if (value < 0 || value > document.TextLength) throw new ArgumentOutOfRangeException(nameof(value));
+            TextArea.Session.Select(value, Math.Min(SelectionLength, document.TextLength - value));
+        }
     }
     public int SelectionLength { get => TextArea.Session.SelectionLength; set => TextArea.Session.Select(SelectionStart, value); }
     public int CaretOffset { get => TextArea.Caret.Offset; set { GetDocument(); TextArea.Caret.Offset = value; } }
@@ -144,13 +149,23 @@ public class TextEditor : UserControl, IDisposable
     protected virtual void OnTextChanged(EventArgs args) => TextChanged?.Invoke(this, args);
     protected virtual void OnOptionChanged(PropertyChangedEventArgs args) => OptionChanged?.Invoke(this, args);
 
-    private TextDocument GetDocument() => Document ?? throw new InvalidOperationException("No document is assigned to the editor.");
+    private TextDocument GetDocument()
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(TextEditor));
+        return Document ?? throw new InvalidOperationException("No document is assigned to the editor.");
+    }
+
+    private void UpdateReadOnly()
+    {
+        if (!_disposed && TextArea != null) TextArea.IsReadOnly = Document == null || IsReadOnly;
+    }
 
     private void ChangeDocument(TextDocument oldDocument, TextDocument newDocument)
     {
+        if (_disposed) return;
         if (oldDocument != null) TextDocumentWeakEventManager.TextChanged.RemoveHandler(oldDocument, OnDocumentTextChanged);
         TextArea.Document = newDocument ?? new TextDocument();
-        TextArea.IsReadOnly = newDocument == null || IsReadOnly;
+        UpdateReadOnly();
         if (newDocument != null) TextDocumentWeakEventManager.TextChanged.AddHandler(newDocument, OnDocumentTextChanged);
         DocumentChanged?.Invoke(this, new DocumentChangedEventArgs(oldDocument, newDocument));
         OnTextChanged(EventArgs.Empty);
@@ -158,6 +173,7 @@ public class TextEditor : UserControl, IDisposable
 
     private void ChangeOptions(TextEditorOptions oldOptions, TextEditorOptions newOptions)
     {
+        if (_disposed) return;
         if (oldOptions != null) oldOptions.PropertyChanged -= OnOptionsChanged;
         TextArea.Options = newOptions;
         if (newOptions != null) newOptions.PropertyChanged += OnOptionsChanged;
@@ -165,9 +181,11 @@ public class TextEditor : UserControl, IDisposable
         OnOptionChanged(new PropertyChangedEventArgs(null));
     }
 
+    private void OnActualThemeChanged(FrameworkElement sender, object args) => RefreshAppearance();
     private void OnDocumentTextChanged(object sender, EventArgs e) => OnTextChanged(e);
     private void OnOptionsChanged(object sender, PropertyChangedEventArgs e)
     {
+        if (_disposed) return;
         TextArea.Options = Options;
         RefreshAppearance();
         OnOptionChanged(e);
@@ -192,20 +210,24 @@ public class TextEditor : UserControl, IDisposable
         TextArea.TextView.Viewport.ShowLineNumbers = ShowLineNumbers;
     }
 
-    public void Dispose()
+    protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
-        _disposed = true;
-        if (Document != null) TextDocumentWeakEventManager.TextChanged.RemoveHandler(Document, OnDocumentTextChanged);
-        if (Options != null) Options.PropertyChanged -= OnOptionsChanged;
-        for (var i = 0; i < _appearanceProperties.Length; i++)
-            UnregisterPropertyChangedCallback(_appearanceProperties[i], _appearanceCallbacks[i]);
-        TextArea.Dispose();
-        TextChanged = null;
-        DocumentChanged = null;
-        SelectionChanged = null;
-        OptionChanged = null;
-        SearchRequested = null;
-        InputError = null;
+        if (disposing && !_disposed)
+        {
+            _disposed = true;
+            ActualThemeChanged -= OnActualThemeChanged;
+            if (Document != null) TextDocumentWeakEventManager.TextChanged.RemoveHandler(Document, OnDocumentTextChanged);
+            if (Options != null) Options.PropertyChanged -= OnOptionsChanged;
+            for (var i = 0; i < _appearanceProperties.Length; i++)
+                UnregisterPropertyChangedCallback(_appearanceProperties[i], _appearanceCallbacks[i]);
+            TextArea.Dispose();
+            TextChanged = null;
+            DocumentChanged = null;
+            SelectionChanged = null;
+            OptionChanged = null;
+            SearchRequested = null;
+            InputError = null;
+        }
+        base.Dispose(disposing);
     }
 }
