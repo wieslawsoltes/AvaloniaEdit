@@ -149,6 +149,17 @@ def verify_package_consumer(directory: Path, version: str, configuration: str) -
     with tempfile.TemporaryDirectory(prefix='unoedit-package-consumer-') as temporary:
         consumer = Path(temporary)
         shutil.copy2(ROOT / 'global.json', consumer / 'global.json')
+        config = ET.Element('configuration')
+        sources = ET.SubElement(config, 'packageSources')
+        ET.SubElement(sources, 'clear')
+        ET.SubElement(sources, 'add', {'key': 'built-native', 'value': str(directory.resolve())})
+        ET.SubElement(sources, 'add', {'key': 'nuget.org', 'value': 'https://api.nuget.org/v3/index.json'})
+        mapping = ET.SubElement(config, 'packageSourceMapping')
+        native = ET.SubElement(mapping, 'packageSource', {'key': 'built-native'})
+        ET.SubElement(native, 'package', {'pattern': 'UnoEdit.*'})
+        external = ET.SubElement(mapping, 'packageSource', {'key': 'nuget.org'})
+        ET.SubElement(external, 'package', {'pattern': '*'})
+        ET.ElementTree(config).write(consumer / 'NuGet.Config', encoding='utf-8', xml_declaration=True)
         (consumer / 'Consumer.csproj').write_text(f'''<Project Sdk="Uno.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net10.0-desktop;net10.0-browserwasm</TargetFrameworks>
@@ -183,8 +194,12 @@ public static class PackageConsumer
     }
 }
 ''', encoding='utf-8')
-        run('dotnet', 'restore', 'Consumer.csproj', '--source', str(directory.resolve()),
-            '--source', 'https://api.nuget.org/v3/index.json', cwd=consumer)
+        # An isolated cache prevents a previously installed package with the
+        # same prerelease version from making this validation a false positive.
+        # Source mapping also prevents an identically named public package from
+        # winning a race against the artifact feed.
+        run('dotnet', 'restore', 'Consumer.csproj', '--configfile', 'NuGet.Config',
+            '--packages', str(consumer / 'packages'), cwd=consumer)
         for framework in ('net10.0-desktop', 'net10.0-browserwasm'):
             run('dotnet', 'build', 'Consumer.csproj', '-c', configuration, '-f', framework, '--no-restore', cwd=consumer)
 
