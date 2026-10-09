@@ -1,0 +1,63 @@
+name: Uno native backend
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uno-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Test shared engine and native input semantics
+        run: dotnet test test/UnoEdit.Core.Tests/UnoEdit.Core.Tests.csproj -c Release --logger "trx;LogFileName=core.trx" --results-directory artifacts/tests/core
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: uno-core-${{ matrix.os }}
+          path: artifacts/tests
+          if-no-files-found: warn
+          retention-days: 14
+
+  rendering:
+    name: Native shaped rendering
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Test native text shaping and viewport
+        run: dotnet test test/UnoEdit.Rendering.Skia.Tests/UnoEdit.Rendering.Skia.Tests.csproj -c Release --logger "trx;LogFileName=rendering.trx" --results-directory artifacts/tests/rendering
+      - name: Pack reusable rendering library
+        run: dotnet pack src/UnoEdit.Rendering.Skia/UnoEdit.Rendering.Skia.csproj -c Release -o artifacts/packages
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: uno-rendering-validation
+          path: artifacts
+          if-no-files-found: warn
+          retention-days: 14
