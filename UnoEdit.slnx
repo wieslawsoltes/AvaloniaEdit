@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".runsettings" />
+    <File Path="azure-pipelines.yml" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="NuGet.config" />
+  </Folder>
+  <Project Path="src/UnoEdit.Demo/UnoEdit.Demo.csproj" />
+  <Project Path="src/UnoEdit.TextMate/UnoEdit.TextMate.csproj" />
+  <Project Path="src/UnoEdit/UnoEdit.csproj" />
+  <Project Path="test/UnoEdit.Tests/UnoEdit.Tests.csproj" />
+</Solution>
