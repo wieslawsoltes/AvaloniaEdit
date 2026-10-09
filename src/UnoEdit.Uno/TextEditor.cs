@@ -18,7 +18,7 @@ namespace UnoEdit;
 /// The migration baseline remains separately buildable until the remaining
 /// completion, snippet, folding-adornment and extension APIs are ported.
 /// </summary>
-public class TextEditor : UserControl
+public class TextEditor : UserControl, IDisposable
 {
     private readonly long[] _appearanceCallbacks;
     private readonly DependencyProperty[] _appearanceProperties;
@@ -210,24 +210,24 @@ public class TextEditor : UserControl
         TextArea.TextView.Viewport.ShowLineNumbers = ShowLineNumbers;
     }
 
-    protected override void Dispose(bool disposing)
+    // Reimplement IDisposable because Uno 6.7's base disposal is nonvirtual.
+    // Both TextEditor.Dispose() and ((IDisposable)editor).Dispose() reach here.
+    public new void Dispose()
     {
-        if (disposing && !_disposed)
-        {
-            _disposed = true;
-            ActualThemeChanged -= OnActualThemeChanged;
-            if (Document != null) TextDocumentWeakEventManager.TextChanged.RemoveHandler(Document, OnDocumentTextChanged);
-            if (Options != null) Options.PropertyChanged -= OnOptionsChanged;
-            for (var i = 0; i < _appearanceProperties.Length; i++)
-                UnregisterPropertyChangedCallback(_appearanceProperties[i], _appearanceCallbacks[i]);
-            TextArea.Dispose();
-            TextChanged = null;
-            DocumentChanged = null;
-            SelectionChanged = null;
-            OptionChanged = null;
-            SearchRequested = null;
-            InputError = null;
-        }
-        base.Dispose(disposing);
+        if (_disposed) return;
+        _disposed = true;
+        ActualThemeChanged -= OnActualThemeChanged;
+        if (Document != null) TextDocumentWeakEventManager.TextChanged.RemoveHandler(Document, OnDocumentTextChanged);
+        if (Options != null) Options.PropertyChanged -= OnOptionsChanged;
+        for (var i = 0; i < _appearanceProperties.Length; i++)
+            UnregisterPropertyChangedCallback(_appearanceProperties[i], _appearanceCallbacks[i]);
+        TextArea.Dispose();
+        TextChanged = null;
+        DocumentChanged = null;
+        SelectionChanged = null;
+        OptionChanged = null;
+        SearchRequested = null;
+        InputError = null;
+        base.Dispose();
     }
 }
