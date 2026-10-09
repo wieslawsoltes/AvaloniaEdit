@@ -17,7 +17,7 @@ using Windows.UI.Core;
 namespace UnoEdit.Editing;
 
 /// <summary>Native Uno input and scroll host over the shared document engine.</summary>
-public class TextArea : UserControl, IDisposable
+public partial class TextArea : UserControl, IDisposable
 {
     private readonly ScrollBar _vertical = new() { Orientation = Orientation.Vertical, Width = 14 };
     private readonly ScrollBar _horizontal = new() { Orientation = Orientation.Horizontal, Height = 14 };
@@ -74,18 +74,20 @@ public class TextArea : UserControl, IDisposable
         AddMenuCommand(menu, "Paste", PasteAsync);
         AddMenuCommand(menu, "Select All", () => { Session.SelectAll(); return Task.CompletedTask; });
         ContextFlyout = menu;
+        InitializeExtensibility();
     }
 
     public EditorSession Session { get; }
     public TextView TextView { get; }
     public Caret Caret { get; }
-    public TextDocument Document { get => Session.Document; set => Session.Document = value; }
+    public TextDocument Document { get => Session.Document; set { Session.Document = value; NotifyExtendedDocumentChanged(); } }
     public TextEditorOptions Options
     {
         get => Session.Options;
         set
         {
             Session.Options = value ?? new TextEditorOptions();
+            NotifyExtendedOptionsChanged();
             TextView.Viewport.Style = TextView.Viewport.Style with { TabSize = Math.Clamp(Session.Options.IndentationSize, 1, 256) };
         }
     }
@@ -168,6 +170,7 @@ public class TextArea : UserControl, IDisposable
     private async void OnEditorKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (_disposed || e.Handled || !IsEditorInputSource(e.OriginalSource)) return;
+        if (DispatchExtendedKey(e)) return;
         var shift = IsDown(VirtualKey.Shift);
         var command = CommandModifier;
         if (IsDown(VirtualKey.Menu)) return; // Keep AltGr and native menu combinations intact.
@@ -231,7 +234,7 @@ public class TextArea : UserControl, IDisposable
         else
             text = (_pendingHighSurrogate.HasValue ? "\ufffd" : string.Empty) + char.ConvertFromUtf32((int)code);
         _pendingHighSurrogate = null;
-        Session.ReplaceSelection(text);
+        InsertInputText(text);
     }
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -344,6 +347,7 @@ public class TextArea : UserControl, IDisposable
         KeyDown -= OnEditorKeyDown;
         CharacterReceived -= OnCharacterReceived;
         Session.Changed -= OnSessionChanged;
+        DisposeExtensibility();
         TextView.PointerPressed -= OnPointerPressed;
         TextView.PointerMoved -= OnPointerMoved;
         TextView.PointerReleased -= OnPointerReleased;
@@ -361,12 +365,12 @@ public class TextArea : UserControl, IDisposable
 }
 
 /// <summary>UTF-16 caret facade backed by the shared native editing session.</summary>
-public sealed class Caret
+public sealed partial class Caret
 {
     private readonly TextArea _area;
     private TextLocation _lastLocation;
     internal Caret(TextArea area) { _area = area; _lastLocation = area.Document.GetLocation(0); }
-    public int Offset { get => _area.Session.CaretOffset; set => _area.Session.MoveTo(value); }
+    public int Offset { get => _area.Session.CaretOffset; set => _area.Session.SetCaretOffset(value); }
     public int Line
     {
         get => _area.Document.GetLocation(Offset).Line;

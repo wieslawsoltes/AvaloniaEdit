@@ -19,7 +19,7 @@
   <!-- Keep the original Avalonia tests on their original transitive graphics
        versions. The two UI stacks are separate migration targets, not loaded
        into one process. These pins belong only to the native Uno projects. -->
-  <ItemGroup Label="Native Uno rendering" Condition="'$(MSBuildProjectName)' == 'UnoEdit.Rendering.Skia' Or '$(MSBuildProjectName)' == 'UnoEdit.Rendering.Skia.Tests' Or '$(MSBuildProjectName)' == 'UnoEdit.Uno' Or '$(MSBuildProjectName)' == 'UnoEdit.Uno.Demo'">
+  <ItemGroup Label="Native Uno rendering" Condition="'$(MSBuildProjectName)' == 'UnoEdit.Rendering.Skia' Or '$(MSBuildProjectName)' == 'UnoEdit.Rendering.Skia.Tests' Or '$(MSBuildProjectName)' == 'UnoEdit.Uno' Or '$(MSBuildProjectName)' == 'UnoEdit.Uno.Demo' Or '$(MSBuildProjectName)' == 'UnoEdit.Uno.Tests'">
     <PackageVersion Include="SkiaSharp" Version="3.119.2" />
     <PackageVersion Include="SkiaSharp.HarfBuzz" Version="3.119.2" />
     <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.2" />

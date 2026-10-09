@@ -13,7 +13,7 @@ namespace UnoEdit.Rendering;
 /// Native Uno drawing surface. It shares the document-backed editing session
 /// with TextArea and draws directly into Uno's existing Skia canvas.
 /// </summary>
-public class TextView : SKCanvasElement, IDisposable
+public partial class TextView : SKCanvasElement, IDisposable
 {
     private readonly bool _ownsSession;
     private bool _drawCaret;
@@ -29,6 +29,7 @@ public class TextView : SKCanvasElement, IDisposable
         Session = session ?? throw new ArgumentNullException(nameof(session));
         _ownsSession = ownsSession;
         Viewport = new DocumentViewport(session.Document);
+        InitializeLayers();
         Viewport.Invalidated += OnViewportInvalidated;
         Session.Changed += OnSessionChanged;
         SizeChanged += OnSizeChanged;
@@ -98,6 +99,7 @@ public class TextView : SKCanvasElement, IDisposable
         SizeChanged -= OnSizeChanged;
         Session.Changed -= OnSessionChanged;
         Viewport.Invalidated -= OnViewportInvalidated;
+        DisposeLayers();
         Viewport.Dispose();
         if (_ownsSession) Session.Dispose();
         VisualLinesChanged = null;

@@ -178,11 +178,12 @@ public sealed partial class DocumentViewport : IDisposable
         if (session != null && !ReferenceEquals(session.Document, _document)) throw new ArgumentException("Session belongs to another document.", nameof(session));
         using var paint = new SKPaint { IsAntialias = true, Color = _style.Background };
         using var numberFont = new SKFont(SKTypeface.Default, _style.FontSize);
-        canvas.Save();
+        var savedCanvasCount = canvas.Save();
         try
         {
             canvas.ClipRect(new SKRect(0, 0, (float)_width, (float)_height));
             canvas.DrawRect(0, 0, (float)_width, (float)_height, paint);
+            RaiseRenderLayer(canvas, ViewportRenderLayer.Background);
             LastVisibleLineCount = 0;
             LastMarkerCount = 0;
             if (_height <= 0 || _width <= 0) return;
@@ -226,16 +227,18 @@ public sealed partial class DocumentViewport : IDisposable
                 line = next;
                 top = _heights.GetVisualPosition(line) - _verticalOffset;
             }
+            RaiseRenderLayer(canvas, ViewportRenderLayer.Text);
             if (drawCaret && session != null)
             {
                 var caret = GetCaretRectangle(session.CaretOffset);
                 paint.Color = _style.Foreground;
                 canvas.DrawRect(caret.Left, caret.Top, Math.Max(1, _style.FontSize / 14), Math.Max(1, caret.Height), paint);
             }
+            RaiseRenderLayer(canvas, ViewportRenderLayer.Caret);
         }
         finally
         {
-            canvas.Restore();
+            canvas.RestoreToCount(savedCanvasCount);
             RenderCount++;
         }
     }
@@ -290,6 +293,7 @@ public sealed partial class DocumentViewport : IDisposable
     {
         _heights.Dispose();
         _heights = new DocumentHeightIndex(_document, DefaultLineHeight);
+        HeightIndexReset?.Invoke(this, EventArgs.Empty);
         _extentWidth = 0;
         ClampOffsets();
     }
@@ -328,5 +332,7 @@ public sealed partial class DocumentViewport : IDisposable
         _heights.Dispose();
         _disposed = true;
         Invalidated = null;
+        RenderingLayer = null;
+        HeightIndexReset = null;
     }
 }

@@ -165,7 +165,7 @@ namespace UnoEdit.Highlighting
         /// <inheritdoc/>
         public HighlightedLine HighlightLine(int lineNumber)
         {
-            ThrowUtil.CheckInRangeInclusive(lineNumber, "lineNumber", 1, Document.LineCount);
+            Internal.ThrowUtil.CheckInRangeInclusive(lineNumber, "lineNumber", 1, Document.LineCount);
             CheckIsHighlighting();
             _isHighlighting = true;
             try
@@ -192,7 +192,7 @@ namespace UnoEdit.Highlighting
         /// </remarks>
         public SpanStack GetSpanStack(int lineNumber)
         {
-            ThrowUtil.CheckInRangeInclusive(lineNumber, "lineNumber", 0, Document.LineCount);
+            Internal.ThrowUtil.CheckInRangeInclusive(lineNumber, "lineNumber", 0, Document.LineCount);
             if (_firstInvalidLine <= lineNumber)
             {
                 UpdateHighlightingState(lineNumber);

@@ -103,7 +103,7 @@ public sealed partial class EditorSession
                     var edit = edits[i];
                     document.Replace(edit.Offset, edit.Length, i == edits.Length - 1 ? text : string.Empty);
                 }
-                _anchor = _caret = Math.Clamp(targetCaret, 0, document.TextLength);
+                _anchor = _selectionEnd = _caret = Math.Clamp(targetCaret, 0, document.TextLength);
                 _changed = true;
             }
         }

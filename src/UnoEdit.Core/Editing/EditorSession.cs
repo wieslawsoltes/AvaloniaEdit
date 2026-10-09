@@ -15,6 +15,7 @@ public sealed partial class EditorSession : IDisposable
     private TextDocument _document;
     private int _anchor;
     private int _caret;
+    private int _selectionEnd;
     private bool _disposed;
     private int _transaction;
     private bool _changed;
@@ -36,7 +37,7 @@ public sealed partial class EditorSession : IDisposable
             _document.Changed -= OnDocumentChanged;
             _document = value;
             _document.Changed += OnDocumentChanged;
-            _anchor = _caret = 0;
+            _anchor = _selectionEnd = _caret = 0;
             NotifyChanged();
         }
     }
@@ -45,8 +46,9 @@ public sealed partial class EditorSession : IDisposable
     public bool IsReadOnly { get; set; }
     public int AnchorOffset => _anchor;
     public int CaretOffset => _caret;
-    public int SelectionStart => Math.Min(_anchor, _caret);
-    public int SelectionLength => Math.Abs(_anchor - _caret);
+    public int SelectionEndOffset => _selectionEnd;
+    public int SelectionStart => Math.Min(_anchor, _selectionEnd);
+    public int SelectionLength => Math.Abs(_anchor - _selectionEnd);
     public string SelectedText => _document.GetText(SelectionStart, SelectionLength);
     public event EventHandler Changed;
 
@@ -56,7 +58,7 @@ public sealed partial class EditorSession : IDisposable
         if (start < 0 || start > _document.TextLength) throw new ArgumentOutOfRangeException(nameof(start));
         if (length < 0 || length > _document.TextLength - start) throw new ArgumentOutOfRangeException(nameof(length));
         _anchor = start;
-        _caret = start + length;
+        _selectionEnd = _caret = start + length;
         NotifyChanged();
     }
 
@@ -64,8 +66,31 @@ public sealed partial class EditorSession : IDisposable
     {
         ThrowIfDisposed();
         if (offset < 0 || offset > _document.TextLength) throw new ArgumentOutOfRangeException(nameof(offset));
-        _caret = offset;
+        _selectionEnd = _caret = offset;
         if (!extendSelection) _anchor = offset;
+        NotifyChanged();
+    }
+
+    /// <summary>Moves the physical caret without changing an existing selection.</summary>
+    /// <summary>Changes selection endpoints independently of the insertion caret.</summary>
+    public void SetSelection(int anchor, int active)
+    {
+        ThrowIfDisposed();
+        if (anchor < 0 || anchor > _document.TextLength) throw new ArgumentOutOfRangeException(nameof(anchor));
+        if (active < 0 || active > _document.TextLength) throw new ArgumentOutOfRangeException(nameof(active));
+        _anchor = anchor; _selectionEnd = active;
+        NotifyChanged();
+    }
+
+    public void SetCaretOffset(int offset)
+    {
+        ThrowIfDisposed();
+        if (offset < 0 || offset > _document.TextLength) throw new ArgumentOutOfRangeException(nameof(offset));
+        if (_caret == offset) return;
+        _caret = offset;
+        // Empty selections follow their insertion point; nonempty selections
+        // remain immutable until an explicit selection/navigation operation.
+        if (SelectionLength == 0) _anchor = _selectionEnd = offset;
         NotifyChanged();
     }
 
@@ -186,17 +211,16 @@ public sealed partial class EditorSession : IDisposable
 
     private void OnDocumentChanged(object sender, DocumentChangeEventArgs e)
     {
-        // A collapsed caret must remain collapsed when another editor modifies
-        // the shared document at precisely that offset.
-        if (_anchor == _caret)
+        _caret = e.GetNewOffset(_caret, AnchorMovementType.AfterInsertion);
+        if (_anchor == _selectionEnd)
         {
-            _anchor = _caret = e.GetNewOffset(_caret, AnchorMovementType.AfterInsertion);
+            _anchor = _selectionEnd = e.GetNewOffset(_anchor, AnchorMovementType.AfterInsertion);
         }
         else
         {
-            var reversed = _anchor > _caret;
+            var reversed = _anchor > _selectionEnd;
             _anchor = e.GetNewOffset(_anchor, reversed ? AnchorMovementType.AfterInsertion : AnchorMovementType.BeforeInsertion);
-            _caret = e.GetNewOffset(_caret, reversed ? AnchorMovementType.BeforeInsertion : AnchorMovementType.AfterInsertion);
+            _selectionEnd = e.GetNewOffset(_selectionEnd, reversed ? AnchorMovementType.BeforeInsertion : AnchorMovementType.AfterInsertion);
         }
         NotifyChanged();
     }

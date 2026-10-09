@@ -1,6 +1,7 @@
 <Project Sdk="Uno.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net10.0-desktop;net10.0-browserwasm</TargetFrameworks>
+    <TargetFrameworks Condition="'$(UnoEditTargetFrameworks)' != ''">$(UnoEditTargetFrameworks)</TargetFrameworks>
     <UnoFeatures>SkiaRenderer</UnoFeatures>
     <OutputType>Library</OutputType>
     <IsPackable>true</IsPackable>
@@ -9,6 +10,7 @@
     <RootNamespace>UnoEdit</RootNamespace>
     <Description>Native Uno Platform control backend for the UnoEdit migration.</Description>
     <PackageTags>uno;editor;code-editor;webassembly</PackageTags>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <SignAssembly>false</SignAssembly>

@@ -29,7 +29,7 @@ public partial class App : Application
     }
 }
 
-public sealed class DemoPage : Page
+public sealed partial class DemoPage : Page
 {
     private readonly TextEditor _editor = new() { ShowLineNumbers = true };
     private readonly TextBlock _status = new() { FontSize = 12, Margin = new Thickness(12, 5, 12, 5) };
@@ -80,6 +80,7 @@ public sealed class DemoPage : Page
         _largeDocumentButton = AddButton(toolbar, "100,000 lines", LoadLargeDocument);
         AddButton(toolbar, "Clear", () => _editor.Clear());
         AddButton(toolbar, "Find / Replace", () => { _editor.SearchPanel.IsReplaceMode = true; _editor.SearchPanel.Reactivate(); }, false);
+        InitializeEditingFeatures(toolbar);
         var wrap = new CheckBox { Content = "Wrap" };
         wrap.Checked += (_, _) => _editor.WordWrap = true;
         wrap.Unchecked += (_, _) => _editor.WordWrap = false;
@@ -179,6 +180,7 @@ public sealed class DemoPage : Page
         if (_editor.Document == null) return;
         var caret = _editor.Document.GetLocation(_editor.CaretOffset);
         _status.Text = _error ?? $"Line {caret.Line:N0}, column {caret.Column:N0}   ·   {_editor.Document.LineCount:N0} lines   ·   {_editor.Document.TextLength:N0} UTF-16 units   ·   selection {_editor.SelectionLength:N0}";
+        if (_snippetActive) _status.Text += "   ·   Snippet: Tab / Shift+Tab / Enter";
         QueueDiagnostics();
     }
 
@@ -212,6 +214,11 @@ public sealed class DemoPage : Page
             var state = new BrowserState
             {
                 Ready = view.Viewport.RenderCount > 0,
+                CompletionOpen = _completion?.IsOpen == true,
+                CompletionSelected = _completion?.CompletionList.SelectedItem?.Text,
+                InsightOpen = _insight?.IsOpen == true,
+                InsightIndex = _insight?.Provider?.SelectedIndex ?? -1,
+                SnippetActive = _snippetActive,
                 TextPrefix = _editor.Document.GetText(0, Math.Min(2048, _editor.Document.TextLength)),
                 TextLength = _editor.Document.TextLength,
                 LineCount = _editor.Document.LineCount,
@@ -244,6 +251,11 @@ public sealed class DemoPage : Page
 internal sealed class BrowserState
 {
     public bool Ready { get; set; }
+    public bool CompletionOpen { get; set; }
+    public string CompletionSelected { get; set; }
+    public bool InsightOpen { get; set; }
+    public int InsightIndex { get; set; }
+    public bool SnippetActive { get; set; }
     public string TextPrefix { get; set; }
     public int TextLength { get; set; }
     public int LineCount { get; set; }
