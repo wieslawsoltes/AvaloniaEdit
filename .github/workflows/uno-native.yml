@@ -4,6 +4,7 @@ on:
   push:
     branches: [port/unoedit]
   pull_request:
+    branches: [port/unoedit]
   workflow_dispatch:
 
 permissions:
@@ -13,6 +14,9 @@ concurrency:
   group: uno-native-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
+# The migration PR targeting master receives these checks from its port/unoedit
+# push. Future feature PRs target the active Uno branch. Do not build and cancel
+# the same source twice through both push and pull_request migration events.
 jobs:
   core:
     name: Core (${{ matrix.os }})
@@ -62,10 +66,45 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  applications:
-    name: Uno desktop, browser and NuGet consumers
+  packages:
+    name: Native NuGet packages and independent consumers
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Install browser library toolchain
+        run: dotnet workload install wasm-tools --skip-manifest-update
+      - name: Validate all three NuGet packages and independent consumers
+        run: |
+          mkdir -p artifacts
+          python3 tools/build.py pack > artifacts/package-validation.log 2>&1 || { tail -120 artifacts/package-validation.log; exit 1; }
+          tail -30 artifacts/package-validation.log
+          cat artifacts/packages/validation.json
+      - name: Record package source revision
+        if: always()
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/package-source-revision.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: uno-native-packages
+          path: |
+            artifacts/packages
+            artifacts/package-validation.log
+            artifacts/package-source-revision.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  applications:
+    name: Uno desktop and browser runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v7
         with:
@@ -100,11 +139,6 @@ jobs:
         env:
           REPOSITORY_NAME: ${{ github.event.repository.name }}
         run: node tools/browser-smoke.mjs artifacts/site "$REPOSITORY_NAME"
-      - name: Validate all three NuGet packages and independent consumers
-        run: |
-          python3 tools/build.py pack > artifacts/package-validation.log 2>&1 || { tail -120 artifacts/package-validation.log; exit 1; }
-          tail -30 artifacts/package-validation.log
-          cat artifacts/packages/validation.json
       - name: Record source revision and test summary
         if: always()
         run: |
@@ -123,7 +157,6 @@ jobs:
           path: |
             artifacts/site
             artifacts/browser-tests
-            artifacts/packages
             artifacts/source-revision.txt
             artifacts/*.binlog
             artifacts/*.log
