@@ -1,0 +1,55 @@
+name: Validate core extraction
+on:
+  push:
+    branches: [port/unoedit]
+    paths: [.github/workflows/extract-core.yml]
+permissions:
+  contents: write
+concurrency:
+  group: unoedit-core-extraction
+  cancel-in-progress: false
+jobs:
+  extract:
+    if: github.repository == 'wieslawsoltes/AvaloniaEdit' && github.ref == 'refs/heads/port/unoedit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.401
+      - name: Extract original source implementations
+        run: python3 tools/extract-core.py
+      - name: Build all projects and target frameworks
+        run: dotnet build UnoEdit.slnx -c Release
+      - name: Test framework-independent core
+        run: dotnet test test/UnoEdit.Core.Tests/UnoEdit.Core.Tests.csproj -c Release --no-build --logger 'trx;LogFileName=core.trx' --results-directory artifacts/test-results/core
+      - name: Test entire original editor regression suite
+        run: dotnet test test/UnoEdit.Tests/UnoEdit.Tests.csproj -c Release --no-build --logger 'trx;LogFileName=baseline.trx' --results-directory artifacts/test-results/baseline
+      - name: Verify core package creation
+        run: dotnet pack src/UnoEdit.Core/UnoEdit.Core.csproj -c Release --no-build -o artifacts/packages
+      - name: Commit only validated source changes
+        run: |
+          git add src test UnoEdit.slnx global.json
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'port: move original document algorithms into UnoEdit.Core and preserve public type forwards'
+            git push origin HEAD:refs/heads/port/unoedit
+          fi
+      - name: Export exact source revision
+        if: always()
+        run: |
+          mkdir -p artifacts
+          git archive --format=tar.gz --output=artifacts/source.tar.gz HEAD
+          git rev-parse HEAD > artifacts/source-revision.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: unoedit-core-validation
+          path: artifacts
+          retention-days: 7
+          if-no-files-found: error
