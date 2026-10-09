@@ -11,6 +11,15 @@ internal static class NativeXmlExtensions
         return value == null ? null : XmlConvert.ToBoolean(value);
     }
 
+    internal static string GetAttributeOrNull(this XmlElement element, string attributeName) =>
+        element.GetAttributeNode(attributeName)?.Value;
+
+    internal static bool? GetBoolAttribute(this XmlElement element, string attributeName)
+    {
+        var value = element.GetAttributeOrNull(attributeName);
+        return value == null ? null : XmlConvert.ToBoolean(value);
+    }
+
     internal static IEnumerable<T> Sequence<T>(T value)
     {
         yield return value;
