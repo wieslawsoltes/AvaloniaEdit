@@ -20,7 +20,11 @@ edits = [
     ('        KeyUp -= OnExtendedKeyUp;', '        PreviewKeyDown -= OnExtendedPreviewKeyDown;\n        KeyUp -= OnExtendedKeyUp;'),
     ('    private void OnExtendedFocus(object sender, RoutedEventArgs e) => RoutedCommand.SetFocusedTarget(this);', '    private void OnExtendedFocus(object sender, RoutedEventArgs e) { RoutedCommand.SetFocusedTarget(this); EnsureBrowserKeyboardFocus(); }'),
     ('        TextEntered?.Invoke(this, args);', '        TextEntered?.Invoke(this, args);\n        EnsureBrowserKeyboardFocus();'),
-    ('    private void InitializeExtensibility()', '''    private void EnsureBrowserKeyboardFocus()
+    ('    private void InitializeExtensibility()', '''#if __WASM__
+    [System.Runtime.InteropServices.JavaScript.JSImport("globalThis.eval")]
+    private static partial void InvokeBrowserFocusScript(string script);
+#endif
+    private void EnsureBrowserKeyboardFocus()
     {
 #if __WASM__
         // Uno 6.7's canvas host retains managed keyboard focus while DOM focus
@@ -28,8 +32,8 @@ edits = [
         // Tab before managed preview routing. Focus the existing canvas only
         // from an already focused editor; never hide the accessibility entry
         // or steal focus from an input, popup, or other browser element.
-        if (!_focused || _disposed) return;
-        global::Uno.Foundation.WebAssemblyRuntime.InvokeJS("(() => { const a = document.activeElement; if (a && a !== document.body && a !== document.documentElement) return; const c = document.querySelector('canvas'); if (c) { if (!c.hasAttribute('tabindex')) c.tabIndex = -1; c.focus({ preventScroll: true }); } })()");
+        if (!_focused || _disposed || !OperatingSystem.IsBrowser()) return;
+        InvokeBrowserFocusScript("(() => { const a = document.activeElement; if (a && a !== document.body && a !== document.documentElement) return; const c = document.querySelector('canvas'); if (c) { if (!c.hasAttribute('tabindex')) c.tabIndex = -1; c.focus({ preventScroll: true }); } })()");
 #endif
     }
 
@@ -40,3 +44,9 @@ for before, after in edits:
         raise RuntimeError(f'Unexpected source while installing native preview routing: {before}')
     text = text.replace(before, after)
 path.write_text(text)
+project = Path('src/UnoEdit.Uno/UnoEdit.Uno.csproj')
+text = project.read_text()
+before = '<ImplicitUsings>disable</ImplicitUsings>'
+if text.count(before) != 1:
+    raise RuntimeError('Unexpected native control project')
+project.write_text(text.replace(before, '<AllowUnsafeBlocks>true</AllowUnsafeBlocks>\n    ' + before))
