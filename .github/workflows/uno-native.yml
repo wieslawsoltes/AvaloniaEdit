@@ -61,3 +61,31 @@ jobs:
           path: artifacts
           if-no-files-found: warn
           retention-days: 14
+
+  applications:
+    name: Uno desktop and WebAssembly
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Install browser toolchain
+        run: dotnet workload install wasm-tools --skip-manifest-update
+      - name: Build native desktop sample
+        run: dotnet build src/UnoEdit.Uno.Demo/UnoEdit.Uno.Demo.csproj -c Release -f net10.0-desktop -bl:desktop.binlog
+      - name: Publish native WebAssembly sample
+        run: dotnet publish src/UnoEdit.Uno.Demo/UnoEdit.Uno.Demo.csproj -c Release -f net10.0-browserwasm -p:WasmShellWebAppBasePath=/${{ github.event.repository.name }}/ -o artifacts/browser -bl:browser.binlog
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: uno-application-validation
+          path: |
+            artifacts/browser
+            desktop.binlog
+            browser.binlog
+          if-no-files-found: warn
+          retention-days: 7
