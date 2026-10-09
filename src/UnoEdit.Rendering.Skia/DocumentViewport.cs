@@ -50,6 +50,7 @@ public sealed partial class DocumentViewport : IDisposable
             if (value == null) throw new ArgumentNullException(nameof(value));
             if (ReferenceEquals(value, _document)) return;
             DetachLineStyleSource();
+            DetachMarkerSource();
             _document.Changing -= OnChanging;
             _document.Changed -= OnChanged;
             ClearCache();
@@ -183,6 +184,7 @@ public sealed partial class DocumentViewport : IDisposable
             canvas.ClipRect(new SKRect(0, 0, (float)_width, (float)_height));
             canvas.DrawRect(0, 0, (float)_width, (float)_height, paint);
             LastVisibleLineCount = 0;
+            LastMarkerCount = 0;
             if (_height <= 0 || _width <= 0) return;
             ClampOffsets();
             var line = _heights.GetLineByVisualPosition(_verticalOffset);
@@ -201,6 +203,7 @@ public sealed partial class DocumentViewport : IDisposable
                 var to = session == null ? 0 : Math.Clamp(session.SelectionStart + session.SelectionLength - line.Offset, 0, line.Length);
                 canvas.Save();
                 canvas.ClipRect(new SKRect((float)GutterWidth, 0, (float)_width, (float)_height));
+                PaintLineMarkers(canvas, line, layout, (float)(GutterWidth - _horizontalOffset), (float)top);
                 layout.Paint(canvas, (float)(GutterWidth - _horizontalOffset), (float)top, from, Math.Max(0, to - from), _style.Selection);
                 if (session != null && session.SelectionStart <= line.EndOffset && session.SelectionStart + session.SelectionLength > line.EndOffset && line.DelimiterLength != 0)
                 {
@@ -318,7 +321,8 @@ public sealed partial class DocumentViewport : IDisposable
     {
         if (_disposed) return;
         DetachLineStyleSource();
-            _document.Changing -= OnChanging;
+        DetachMarkerSource();
+        _document.Changing -= OnChanging;
         _document.Changed -= OnChanged;
         ClearCache();
         _heights.Dispose();

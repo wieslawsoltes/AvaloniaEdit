@@ -31,6 +31,7 @@ public class SearchPanel : Control, IDisposable
     private CheckBox _caseBox, _wordsBox, _regexBox, _replaceModeBox;
     private FrameworkElement _replaceRow;
     private bool _syncing;
+    private bool _focusRequested;
     private bool _disposed;
     private long _readOnlyToken;
 
@@ -135,6 +136,7 @@ public class SearchPanel : Control, IDisposable
     private void CloseCore(bool restoreFocus)
     {
         IsClosed = true;
+        _focusRequested = false;
         _debounce.Stop();
         _session.IsActive = false;
         var viewport = _editor.TextArea.TextView.Viewport;
@@ -147,10 +149,13 @@ public class SearchPanel : Control, IDisposable
     public void Reactivate()
     {
         VerifyInstalled();
+        _focusRequested = true;
         Open();
         ApplyTemplate();
-        _searchBox?.Focus(FocusState.Programmatic);
-        _searchBox?.SelectAll();
+        TryFocusSearchBox();
+        // A first-open control may not have been measured or loaded yet.
+        // The request is retried by template/load callbacks, not a busy loop.
+        DispatcherQueue.TryEnqueue(TryFocusSearchBox);
     }
 
     public void FindNext() { VerifyInstalled(); Open(); Refresh(false); _session.FindNext(); ShowCurrentResult(); }
@@ -277,6 +282,7 @@ public class SearchPanel : Control, IDisposable
         HookButton("PART_replaceAll", (_, _) => ReplaceAll());
         HookButton("PART_close", (_, _) => Close());
         SyncTemplate();
+        TryFocusSearchBox();
     }
 
     private void HookTextBox(TextBox box, bool search)
@@ -363,7 +369,16 @@ public class SearchPanel : Control, IDisposable
     }
     private void OnEditorSizeChanged(object sender, SizeChangedEventArgs args) => UpdateSize();
     private void UpdateSize() => MaxWidth = Math.Max(0, (_editor?.TextArea.ActualWidth ?? 452) - 12);
-    private void OnLoaded(object sender, RoutedEventArgs args) { UpdateSize(); ScheduleSearch(); }
+    private void TryFocusSearchBox()
+    {
+        if (_disposed || IsClosed || !_focusRequested || _searchBox == null) return;
+        if (_searchBox.Focus(FocusState.Programmatic))
+        {
+            _focusRequested = false;
+            _searchBox.SelectAll();
+        }
+    }
+    private void OnLoaded(object sender, RoutedEventArgs args) { UpdateSize(); ScheduleSearch(); TryFocusSearchBox(); }
     private void OnUnloaded(object sender, RoutedEventArgs args) => _debounce.Stop();
     private void VerifyInstalled()
     {

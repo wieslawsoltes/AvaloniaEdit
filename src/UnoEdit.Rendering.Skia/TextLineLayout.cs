@@ -174,6 +174,37 @@ public sealed class TextLineLayout : IDisposable
         return _scalarToUtf16[Math.Clamp(hit.ClosestCodePointIndex, 0, _scalarToUtf16.Length - 1)];
     }
 
+    /// <summary>
+    /// Range geometry split across actual shaped font runs. Wrapped and bidi
+    /// text can produce several rectangles; logical endpoints are not assumed
+    /// to describe one left-to-right rectangle.
+    /// </summary>
+    public IReadOnlyList<SKRect> GetRangeRectangles(int start, int length)
+    {
+        ThrowIfDisposed();
+        if (start < 0 || start > Length || length < 0 || length > Length - start)
+            throw new ArgumentOutOfRangeException(nameof(length));
+        if (length == 0)
+        {
+            var caret = GetCaretRectangle(start);
+            return new[] { new SKRect(caret.Left, caret.Top, caret.Left + 2, Math.Max(caret.Top + 1, caret.Bottom)) };
+        }
+        var from = GetScalarIndex(start);
+        var to = GetScalarIndex(start + length);
+        var rectangles = new List<SKRect>();
+        foreach (var run in _block.FontRuns)
+        {
+            var first = Math.Max(from, run.Start);
+            var last = Math.Min(to, run.End);
+            if (last <= first) continue;
+            var x1 = run.GetXCoordOfCodePointIndex(first);
+            var x2 = run.GetXCoordOfCodePointIndex(last);
+            rectangles.Add(new SKRect(Math.Min(x1, x2), run.Line.YCoord,
+                Math.Max(x1, x2), run.Line.YCoord + run.Line.Height));
+        }
+        return rectangles;
+    }
+
     public SKRect GetCaretRectangle(int utf16Offset)
     {
         var index = GetScalarIndex(utf16Offset);

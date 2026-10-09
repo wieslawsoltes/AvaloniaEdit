@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using UnoEdit.Document;
 using UnoEdit.Rendering;
 using Windows.ApplicationModel.DataTransfer;
@@ -103,6 +104,29 @@ public class TextArea : UserControl, IDisposable
     public void RemoveSelectedText() => Session.ReplaceSelection(string.Empty);
     public event EventHandler SelectionChanged;
     public event EventHandler SearchRequested;
+    internal event EventHandler ReplaceRequested;
+    internal event EventHandler FindNextRequested;
+    internal event EventHandler FindPreviousRequested;
+
+    /// <summary>Adds a native overlay without replacing the document drawing surface.</summary>
+    public void AddChild(UIElement child)
+    {
+        if (child == null) throw new ArgumentNullException(nameof(child));
+        if (_disposed) throw new ObjectDisposedException(nameof(TextArea));
+        var grid = (Grid)Content;
+        if (!grid.Children.Contains(child)) grid.Children.Add(child);
+    }
+    public void RemoveChild(UIElement child)
+    {
+        if (child != null && Content is Grid grid && !ReferenceEquals(child, TextView) &&
+            !ReferenceEquals(child, _vertical) && !ReferenceEquals(child, _horizontal)) grid.Children.Remove(child);
+    }
+    private bool IsEditorInputSource(object source)
+    {
+        for (var element = source as DependencyObject; element != null && !ReferenceEquals(element, this); element = VisualTreeHelper.GetParent(element))
+            if (element is Search.SearchPanel || element is TextBox || element is ButtonBase || element is ScrollBar) return false;
+        return true;
+    }
     public event EventHandler<Exception> InputError;
 
     public void Copy()
@@ -143,7 +167,7 @@ public class TextArea : UserControl, IDisposable
 
     private async void OnEditorKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (_disposed) return;
+        if (_disposed || e.Handled || !IsEditorInputSource(e.OriginalSource)) return;
         var shift = IsDown(VirtualKey.Shift);
         var command = CommandModifier;
         if (IsDown(VirtualKey.Menu)) return; // Keep AltGr and native menu combinations intact.
@@ -160,12 +184,14 @@ public class TextArea : UserControl, IDisposable
                     case VirtualKey.Z: if (shift) Session.Redo(); else Session.Undo(); e.Handled = true; return;
                     case VirtualKey.Y: Session.Redo(); e.Handled = true; return;
                     case VirtualKey.F: SearchRequested?.Invoke(this, EventArgs.Empty); e.Handled = true; return;
+                    case VirtualKey.H: ReplaceRequested?.Invoke(this, EventArgs.Empty); e.Handled = true; return;
                     case VirtualKey.Tab: return;
                 }
             }
             e.Handled = true;
             switch (e.Key)
             {
+                case VirtualKey.F3: if (shift) FindPreviousRequested?.Invoke(this, EventArgs.Empty); else FindNextRequested?.Invoke(this, EventArgs.Empty); break;
                 case VirtualKey.Left: Session.MoveHorizontal(-1, shift, command); break;
                 case VirtualKey.Right: Session.MoveHorizontal(1, shift, command); break;
                 case VirtualKey.Up: MoveVisualLine(-TextView.DefaultLineHeight, shift); break;
@@ -194,7 +220,7 @@ public class TextArea : UserControl, IDisposable
 
     private void OnCharacterReceived(UIElement sender, CharacterReceivedRoutedEventArgs e)
     {
-        if (_disposed || IsReadOnly || CommandModifier && !IsDown(VirtualKey.Menu)) return;
+        if (_disposed || e.Handled || !IsEditorInputSource(e.OriginalSource) || IsReadOnly || CommandModifier && !IsDown(VirtualKey.Menu)) return;
         var code = (uint)e.Character;
         if (code < 32 || code == 127 || code > 0x10ffff) return;
         e.Handled = true;
@@ -326,6 +352,9 @@ public class TextArea : UserControl, IDisposable
         Session.Dispose();
         SelectionChanged = null;
         SearchRequested = null;
+        ReplaceRequested = null;
+        FindNextRequested = null;
+        FindPreviousRequested = null;
         InputError = null;
         base.Dispose();
     }

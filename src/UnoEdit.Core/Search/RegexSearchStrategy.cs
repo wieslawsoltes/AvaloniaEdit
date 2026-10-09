@@ -37,9 +37,13 @@ namespace UnoEdit.Search
 		
 		public IEnumerable<ISearchResult> FindAll(ITextSource document, int offset, int length)
 		{
-			int endOffset = offset + length;
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (offset < 0 || offset > document.TextLength) throw new ArgumentOutOfRangeException(nameof(offset));
+            if (length < 0 || length > document.TextLength - offset) throw new ArgumentOutOfRangeException(nameof(length));
+            int endOffset = offset + length;
 			foreach (Match result in _searchPattern.Matches(document.Text)) {
-				int resultEndOffset = result.Length + result.Index;
+                if (result.Index > endOffset) yield break;
+                int resultEndOffset = result.Length + result.Index;
 				if (offset > result.Index || endOffset < resultEndOffset)
 					continue;
 				if (_matchWholeWords && (!IsWordBorder(document, result.Index) || !IsWordBorder(document, resultEndOffset)))
@@ -62,6 +66,8 @@ namespace UnoEdit.Search
 		{
 			var strategy = other as RegexSearchStrategy;
 			return strategy != null &&
+                strategy._matchWholeWords == _matchWholeWords &&
+                strategy._searchPattern.MatchTimeout == _searchPattern.MatchTimeout &&
 				strategy._searchPattern.ToString() == _searchPattern.ToString() &&
 				strategy._searchPattern.Options == _searchPattern.Options &&
 				strategy._searchPattern.RightToLeft == _searchPattern.RightToLeft;

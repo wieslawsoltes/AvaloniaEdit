@@ -9,6 +9,7 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { verifySearchPanel } from './browser-search-checks.mjs';
 
 const publishRoot = path.resolve(process.argv[2] ?? 'artifacts/browser');
 const basePath = '/' + (process.argv[3] ?? 'AvaloniaEdit').replace(/^\/+|\/+$/g, '') + '/';
@@ -113,6 +114,7 @@ try {
   await textIs('A\t\nمرحبا 日本語');
   checks.push('surrogate and combining-character deletion through UI input');
   await page.screenshot({ path: path.join(output, 'unicode.png') });
+  await verifySearchPanel({ page, wait, state, textIs, checks, output });
   current = await state();
   const largeStarted = performance.now();
   await page.mouse.click(current.LargeButtonX, current.LargeButtonY);

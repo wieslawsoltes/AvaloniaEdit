@@ -69,6 +69,7 @@ internal static class NativeControlChecks
         checks.AddRange(NativeHighlightingChecks.Run());
         checks.AddRange(LegacyHighlightingChecks.Run());
         checks.AddRange(NativeReadOnlyChecks.Run());
+        checks.AddRange(NativeSearchChecks.Run());
         return checks.ToArray();
     }
 

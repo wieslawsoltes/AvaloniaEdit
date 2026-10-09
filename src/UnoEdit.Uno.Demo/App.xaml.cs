@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -78,6 +79,7 @@ public sealed class DemoPage : Page
         AddButton(toolbar, "Redo", () => _editor.Redo());
         _largeDocumentButton = AddButton(toolbar, "100,000 lines", LoadLargeDocument);
         AddButton(toolbar, "Clear", () => _editor.Clear());
+        AddButton(toolbar, "Find / Replace", () => { _editor.SearchPanel.IsReplaceMode = true; _editor.SearchPanel.Reactivate(); }, false);
         var wrap = new CheckBox { Content = "Wrap" };
         wrap.Checked += (_, _) => _editor.WordWrap = true;
         wrap.Unchecked += (_, _) => _editor.WordWrap = false;
@@ -115,7 +117,6 @@ public sealed class DemoPage : Page
         _editor.SelectionChanged += (_, _) => UpdateStatus();
         _editor.TextArea.TextView.Rendered += (_, _) => QueueDiagnostics();
         _editor.InputError += (_, error) => { _error = error.Message; UpdateStatus(); };
-        _editor.SearchRequested += (_, _) => _search.Focus(FocusState.Programmatic);
         _search.KeyDown += (_, e) => { if (e.Key == Windows.System.VirtualKey.Enter) { FindNext(); e.Handled = true; } };
         _editor.Text = _smoke ? string.Empty : "// UnoEdit native Uno Platform preview\n// Open an original sample file above, or try 100,000 lines.\n\npublic class Welcome\n{\n    public string Message => \"Hello, UnoEdit!\";\n}\n\n// Unicode: مرحبا  שלום  日本語  🙂  e\u0301\n";
         Loaded += (_, _) =>
@@ -140,13 +141,13 @@ public sealed class DemoPage : Page
         UpdateStatus();
     }
 
-    private Button AddButton(Panel panel, string title, Action action)
+    private Button AddButton(Panel panel, string title, Action action, bool focusEditor = true)
     {
         var button = new Button { Content = title };
         AutomationProperties.SetName(button, title);
         button.Click += (_, _) =>
         {
-            try { action(); _editor.TextArea.Focus(FocusState.Programmatic); }
+            try { action(); if (focusEditor) _editor.TextArea.Focus(FocusState.Programmatic); }
             catch (Exception error) { _error = error.Message; UpdateStatus(); }
         };
         panel.Children.Add(button);
@@ -168,11 +169,9 @@ public sealed class DemoPage : Page
     {
         var pattern = _search.Text;
         if (string.IsNullOrEmpty(pattern)) return;
-        var start = Math.Min(_editor.Document.TextLength, _editor.SelectionStart + Math.Max(1, _editor.SelectionLength));
-        var result = _editor.Document.IndexOf(pattern, start, _editor.Document.TextLength - start, StringComparison.OrdinalIgnoreCase);
-        if (result < 0) result = _editor.Document.IndexOf(pattern, 0, start, StringComparison.OrdinalIgnoreCase);
-        if (result >= 0) { _editor.Select(result, pattern.Length); _editor.TextArea.Caret.BringCaretToView(); }
-        else _status.Text = "No match";
+        _editor.SearchPanel.SearchPattern = pattern;
+        _editor.SearchPanel.UseRegex = false;
+        _editor.SearchPanel.FindNext();
     }
 
     private void UpdateStatus()
@@ -181,6 +180,21 @@ public sealed class DemoPage : Page
         var caret = _editor.Document.GetLocation(_editor.CaretOffset);
         _status.Text = _error ?? $"Line {caret.Line:N0}, column {caret.Column:N0}   ·   {_editor.Document.LineCount:N0} lines   ·   {_editor.Document.TextLength:N0} UTF-16 units   ·   selection {_editor.SelectionLength:N0}";
         QueueDiagnostics();
+    }
+
+    private Dictionary<string, double[]> GetSearchParts()
+    {
+        var parts = new Dictionary<string, double[]>();
+        if (!_editor.SearchPanel.IsOpened) return parts;
+        foreach (var name in new[] { "PART_searchTextBox", "PART_replaceTextBox", "PART_findNext", "PART_findPrevious",
+            "PART_matchCase", "PART_wholeWords", "PART_useRegex", "PART_replaceMode", "PART_replaceNext", "PART_replaceAll", "PART_close" })
+        {
+            var element = NativeSearchChecks.FindPart<FrameworkElement>(_editor.SearchPanel, name);
+            if (element == null || element.Visibility != Visibility.Visible) continue;
+            var origin = element.TransformToVisual(this).TransformPoint(new Point());
+            parts[name] = new[] { origin.X, origin.Y, element.ActualWidth, element.ActualHeight };
+        }
+        return parts;
     }
 
     private void QueueDiagnostics()
@@ -210,6 +224,15 @@ public sealed class DemoPage : Page
                 LargeButtonX = button.X + _largeDocumentButton.ActualWidth / 2,
                 LargeButtonY = button.Y + _largeDocumentButton.ActualHeight / 2,
                 ControlChecks = _controlChecks,
+                SearchOpen = _editor.SearchPanel.IsOpened,
+                SearchPattern = _editor.SearchPanel.SearchPattern,
+                ReplacePattern = _editor.SearchPanel.ReplacePattern,
+                SearchResultCount = _editor.SearchPanel.ResultCount,
+                SearchError = _editor.SearchPanel.LastError?.Message,
+                SearchStatus = _editor.SearchPanel.StatusText,
+                SearchReplaceCount = _editor.SearchPanel.LastReplaceCount,
+                SelectionStart = _editor.SelectionStart,
+                SearchParts = GetSearchParts(),
                 Error = _error
             };
             global::Uno.Foundation.WebAssemblyRuntime.InvokeJS("globalThis.__unoEditTestState = " + JsonSerializer.Serialize(state, BrowserJsonContext.Default.BrowserState) + ";");
@@ -236,6 +259,15 @@ internal sealed class BrowserState
     public double LargeButtonX { get; set; }
     public double LargeButtonY { get; set; }
     public string[] ControlChecks { get; set; }
+    public bool SearchOpen { get; set; }
+    public string SearchPattern { get; set; }
+    public string ReplacePattern { get; set; }
+    public int SearchResultCount { get; set; }
+    public string SearchError { get; set; }
+    public string SearchStatus { get; set; }
+    public int SearchReplaceCount { get; set; }
+    public int SelectionStart { get; set; }
+    public Dictionary<string, double[]> SearchParts { get; set; }
     public string Error { get; set; }
 }
 

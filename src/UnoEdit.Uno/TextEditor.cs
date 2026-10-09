@@ -52,6 +52,7 @@ public partial class TextEditor : UserControl, IDisposable
         ActualThemeChanged += OnActualThemeChanged;
         Options = new TextEditorOptions();
         Document = new TextDocument();
+        InitializeSearchPanel();
         RefreshAppearance();
     }
 
@@ -216,6 +217,7 @@ public partial class TextEditor : UserControl, IDisposable
     public new void Dispose()
     {
         if (_disposed) return;
+        DisposeSearchPanel();
         _disposed = true;
         ActualThemeChanged -= OnActualThemeChanged;
         if (Document != null) TextDocumentWeakEventManager.TextChanged.RemoveHandler(Document, OnDocumentTextChanged);
