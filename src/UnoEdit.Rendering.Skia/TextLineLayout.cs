@@ -21,9 +21,9 @@ public sealed record TextViewStyle
 }
 
 /// <summary>
-/// Shapes one document line with font fallback, bidi processing and grapheme
-/// hit testing supplied by RichTextKit/HarfBuzz. The editor-facing contract
-/// always uses UTF-16 offsets; the shaping backend uses Unicode scalar indexes.
+/// Shapes a document line, including its syntax styles, through RichTextKit and
+/// HarfBuzz. All public offsets are UTF-16; the backend uses scalar indexes.
+/// Text, background, decorations, selections and caret geometry share one layout.
 /// </summary>
 public sealed class TextLineLayout : IDisposable
 {
@@ -33,14 +33,19 @@ public sealed class TextLineLayout : IDisposable
     private bool _disposed;
 
     public TextLineLayout(string text, TextViewStyle style, float? wrapWidth = null)
+        : this(text, style, wrapWidth, null) { }
+
+    public TextLineLayout(string text, TextViewStyle style, float? wrapWidth, IReadOnlyList<TextStyleSpan> spans)
     {
         if (text == null) throw new ArgumentNullException(nameof(text));
         if (style == null) throw new ArgumentNullException(nameof(style));
         if (!float.IsFinite(style.FontSize) || style.FontSize <= 0) throw new ArgumentOutOfRangeException(nameof(style));
         if (style.TabSize < 1 || style.TabSize > 256) throw new ArgumentOutOfRangeException(nameof(style));
-        if (wrapWidth.HasValue && (!float.IsFinite(wrapWidth.Value) || wrapWidth <= 0)) throw new ArgumentOutOfRangeException(nameof(wrapWidth));
+        if (wrapWidth.HasValue && (!float.IsFinite(wrapWidth.Value) || wrapWidth.Value <= 0)) throw new ArgumentOutOfRangeException(nameof(wrapWidth));
+        ValidateSpans(text, spans);
         Length = text.Length;
         _utf16ToScalar = new int[text.Length + 1];
+        var expandedOffsets = spans == null || spans.Count == 0 ? null : new int[text.Length + 1];
         var reverse = new List<int>(text.Length + 1) { 0 };
         var expanded = new StringBuilder(text.Length);
         var scalar = 0;
@@ -48,12 +53,12 @@ public sealed class TextLineLayout : IDisposable
         for (var i = 0; i < text.Length;)
         {
             _utf16ToScalar[i] = scalar;
+            if (expandedOffsets != null) expandedOffsets[i] = expanded.Length;
             if (text[i] == '\t')
             {
                 var spaces = style.TabSize - column % style.TabSize;
                 expanded.Append(' ', spaces);
-                for (var s = 1; s <= spaces; s++)
-                    reverse.Add(s * 2 < spaces ? i : i + 1);
+                for (var s = 1; s <= spaces; s++) reverse.Add(s * 2 < spaces ? i : i + 1);
                 scalar += spaces;
                 column += spaces;
                 i++;
@@ -61,8 +66,12 @@ public sealed class TextLineLayout : IDisposable
             else
             {
                 var length = i + 1 < text.Length && char.IsSurrogatePair(text[i], text[i + 1]) ? 2 : 1;
+                if (length == 2)
+                {
+                    _utf16ToScalar[i + 1] = scalar;
+                    if (expandedOffsets != null) expandedOffsets[i + 1] = expanded.Length;
+                }
                 expanded.Append(text, i, length);
-                if (length == 2) _utf16ToScalar[i + 1] = scalar;
                 scalar++;
                 column++;
                 i += length;
@@ -71,21 +80,77 @@ public sealed class TextLineLayout : IDisposable
         }
         _utf16ToScalar[text.Length] = scalar;
         _scalarToUtf16 = reverse.ToArray();
+        if (expandedOffsets != null) expandedOffsets[text.Length] = expanded.Length;
         _block = new TextBlock { MaxWidth = wrapWidth, EllipsisEnabled = false };
-        _block.AddText(expanded.Length == 0 ? "\n" : expanded.ToString(), new Style
+        var defaultStyle = CreateStyle(style, null);
+        try
         {
-            FontFamily = style.FontFamily,
-            FontSize = style.FontSize,
-            TextColor = style.Foreground
-        });
-        _block.Layout();
-        Width = _block.MeasuredWidth;
-        Height = Math.Max(style.FontSize, _block.MeasuredHeight);
+            if (expandedOffsets == null || text.Length == 0)
+            {
+                _block.AddText(expanded.Length == 0 ? "\n" : expanded.ToString(), defaultStyle);
+                StyleRunCount = 1;
+            }
+            else
+            {
+                var position = 0;
+                foreach (var span in spans)
+                {
+                    if (span.Start > position) AppendRun(position, span.Start, defaultStyle);
+                    if (span.Length > 0) AppendRun(span.Start, span.Start + span.Length, CreateStyle(style, span));
+                    position = span.Start + span.Length;
+                }
+                if (position < text.Length) AppendRun(position, text.Length, defaultStyle);
+            }
+            _block.Layout();
+            Width = _block.MeasuredWidth;
+            Height = Math.Max(style.FontSize, _block.MeasuredHeight);
+        }
+        catch { _block.Clear(); throw; }
+
+        void AppendRun(int from, int to, Style runStyle)
+        {
+            var start = expandedOffsets[from];
+            var length = expandedOffsets[to] - start;
+            if (length == 0) return;
+            _block.AddText(expanded.ToString(start, length), runStyle);
+            StyleRunCount++;
+        }
     }
 
     public int Length { get; }
     public float Width { get; }
     public float Height { get; }
+    public int StyleRunCount { get; private set; }
+
+    private static Style CreateStyle(TextViewStyle basis, TextStyleSpan span) => new()
+    {
+        FontFamily = span?.FontFamily ?? basis.FontFamily,
+        FontSize = span?.FontSize ?? basis.FontSize,
+        FontWeight = span?.FontWeight ?? 400,
+        FontItalic = span?.Italic ?? false,
+        TextColor = span?.Foreground ?? basis.Foreground,
+        BackgroundColor = span?.Background ?? SKColors.Transparent,
+        Underline = span?.Underline == true ? UnderlineStyle.Solid : UnderlineStyle.None,
+        StrikeThrough = span?.Strikethrough == true ? StrikeThroughStyle.Solid : StrikeThroughStyle.None
+    };
+
+    private static void ValidateSpans(string text, IReadOnlyList<TextStyleSpan> spans)
+    {
+        if (spans == null) return;
+        var previousEnd = 0;
+        foreach (var span in spans)
+        {
+            if (span == null || span.Start < previousEnd || span.Start > text.Length || span.Length < 0 || span.Length > text.Length - span.Start)
+                throw new ArgumentException("Style runs must be sorted, non-overlapping and within the line.", nameof(spans));
+            var end = span.Start + span.Length;
+            if (IsSurrogateInterior(span.Start) || IsSurrogateInterior(end))
+                throw new ArgumentException("Style runs must not split a UTF-16 surrogate pair.", nameof(spans));
+            if (span.FontSize is float size && (!float.IsFinite(size) || size <= 0) || span.FontWeight is int weight && (weight < 1 || weight > 1000))
+                throw new ArgumentException("Style font size/weight is outside its supported range.", nameof(spans));
+            previousEnd = end;
+        }
+        bool IsSurrogateInterior(int offset) => offset > 0 && offset < text.Length && char.IsSurrogatePair(text[offset - 1], text[offset]);
+    }
 
     public int GetScalarIndex(int utf16Offset)
     {
