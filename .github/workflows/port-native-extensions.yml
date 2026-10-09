@@ -1,18 +1,14 @@
 name: Validate native completion and snippets
-
 on:
   push:
     branches: [port/unoedit]
-    paths: ['.github/workflows/port-native-extensions.yml', 'tools/native-extensions.payload.*']
+    paths: ['.github/workflows/port-native-extensions.yml', 'tools/native-extensions.payload.*', 'tools/fix-native-preview.py']
   workflow_dispatch:
-
 permissions:
   contents: write
-
 concurrency:
   group: unoedit-native-extension-migration
   cancel-in-progress: true
-
 jobs:
   migrate:
     if: github.repository == 'wieslawsoltes/AvaloniaEdit' && github.ref == 'refs/heads/port/unoedit'
@@ -66,14 +62,11 @@ jobs:
                   raise RuntimeError(f'Reconstructed-source checksum mismatch: {path}')
               target = Path(path)
               if path.startswith('.github/') and target.read_bytes() != data:
-                  raise RuntimeError('Workflow edits must be committed through the authorized workflow connection first')
+                  raise RuntimeError('Workflow edits must be committed through the authorized connection first')
               outputs.append((target, data))
           for target, data in outputs:
               target.parent.mkdir(parents=True, exist_ok=True)
               target.write_bytes(data)
-          # Uno's ListBox scrolling members are not implemented on WebAssembly.
-          # ListView provides the supported virtualized selector while retaining
-          # the editor-owned CompletionListBox public name and template part.
           path = Path('src/UnoEdit.Uno/CodeCompletion/CompletionList.cs')
           text = path.read_text()
           for before, after in (
@@ -86,6 +79,7 @@ jobs:
           path.write_text(text)
           print(f'Verified and materialized {len(outputs)} source files; original licenses retained.')
           PY
+          python3 tools/fix-native-preview.py
           git add src test Directory.Packages.props
           git add -f tools/browser-completion.mjs
           git add -u tools/browser-smoke.mjs
