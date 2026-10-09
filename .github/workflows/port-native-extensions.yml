@@ -71,6 +71,19 @@ jobs:
           for target, data in outputs:
               target.parent.mkdir(parents=True, exist_ok=True)
               target.write_bytes(data)
+          # Uno's ListBox scrolling members are not implemented on WebAssembly.
+          # ListView provides the supported virtualized selector while retaining
+          # the editor-owned CompletionListBox public name and template part.
+          path = Path('src/UnoEdit.Uno/CodeCompletion/CompletionList.cs')
+          text = path.read_text()
+          for before, after in (
+              ('node is ListBoxItem item', 'node is ListViewItem item'),
+              ('CompletionListBox : ListBox', 'CompletionListBox : ListView'),
+              ('SelectionMode = SelectionMode.Single', 'SelectionMode = ListViewSelectionMode.Single')):
+              if text.count(before) != 1:
+                  raise RuntimeError(f'Unexpected completion source: {before}')
+              text = text.replace(before, after)
+          path.write_text(text)
           print(f'Verified and materialized {len(outputs)} source files; original licenses retained.')
           PY
           git add src test Directory.Packages.props
