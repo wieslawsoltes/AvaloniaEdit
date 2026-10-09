@@ -2,7 +2,7 @@ name: Validate native visual pipeline and folding
 on:
   push:
     branches: [port/unoedit]
-    paths: ['.github/workflows/port-native-visuals.yml', 'tools/native-visuals.payload.*']
+    paths: ['.github/workflows/port-native-visuals.yml', 'tools/native-visuals.payload.*', 'tools/fix-visual-pointer.py']
   workflow_dispatch:
 permissions:
   contents: write
@@ -72,6 +72,7 @@ jobs:
               target.write_bytes(data)
           print(f'Verified {len(outputs)} implementation and test files. Original source notices retained.')
           PY
+          python3 tools/fix-visual-pointer.py
           git add src test
           git add -f tools/browser-visuals.mjs
           git add -u tools/browser-smoke.mjs
