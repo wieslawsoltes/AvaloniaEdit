@@ -3,6 +3,7 @@
     <TargetFrameworks>net10.0-desktop;net10.0-browserwasm</TargetFrameworks>
     <UnoFeatures>SkiaRenderer</UnoFeatures>
     <OutputType>Library</OutputType>
+    <IsPackable>true</IsPackable>
     <PackageId>UnoEdit.Uno</PackageId>
     <Version>0.1.0-alpha.1</Version>
     <RootNamespace>UnoEdit</RootNamespace>
