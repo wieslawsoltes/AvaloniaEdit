@@ -1,0 +1,52 @@
+name: Verify editor identity migration
+on:
+  push:
+    branches: [port/unoedit]
+    paths: [.github/workflows/rename-editor.yml]
+permissions:
+  contents: write
+concurrency:
+  group: unoedit-identity-migration
+  cancel-in-progress: false
+jobs:
+  rename:
+    if: github.repository == 'wieslawsoltes/AvaloniaEdit' && github.ref == 'refs/heads/port/unoedit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: port/unoedit
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.401
+      - name: Rename editor identities and preserve source
+        run: |
+          python3 tools/rename-editor.py
+          git add -A
+      - name: Build renamed baseline
+        run: dotnet build UnoEdit.slnx -c Release
+      - name: Run all renamed regression tests
+        run: dotnet test test/UnoEdit.Tests/UnoEdit.Tests.csproj -c Release --no-build --logger 'trx;LogFileName=identity.trx' --results-directory artifacts/test-results
+      - name: Commit validated source changes
+        run: |
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'refactor: rename every editor project, namespace, resource and test to UnoEdit'
+            git push origin HEAD:refs/heads/port/unoedit
+          fi
+      - name: Export exact renamed source
+        if: always()
+        run: |
+          mkdir -p artifacts
+          git archive --format=tar.gz --output=artifacts/renamed-source.tar.gz HEAD
+          git rev-parse HEAD > artifacts/source-revision.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unoedit-identity-validation
+          path: artifacts
+          if-no-files-found: error
+          retention-days: 7

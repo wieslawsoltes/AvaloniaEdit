@@ -18,12 +18,26 @@
     <SignAssembly>true</SignAssembly>
   </PropertyGroup>
 
+  <!-- The retained Avalonia baseline keeps its original identity. Every native
+       package must use the same preview version, even when packed directly
+       rather than through tools/build.py. Command-line Version still wins. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'UnoEdit.Core' Or '$(MSBuildProjectName)' == 'UnoEdit.Rendering.Skia' Or '$(MSBuildProjectName)' == 'UnoEdit.Uno'">
+    <Version>0.1.0-alpha.1</Version>
+    <Authors>Avalonia Team;Wiesław Šoltés</Authors>
+    <RepositoryUrl>https://github.com/wieslawsoltes/AvaloniaEdit</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/wieslawsoltes/AvaloniaEdit/tree/port/unoedit</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup Label="PackageIcon">
     <None Include="$(MSBuildThisFileDirectory)/Icon.png" Pack="true" Visible="false" PackagePath=""/>
+  </ItemGroup>
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'UnoEdit.Core' Or '$(MSBuildProjectName)' == 'UnoEdit.Rendering.Skia' Or '$(MSBuildProjectName)' == 'UnoEdit.Uno'">
+    <None Include="$(MSBuildThisFileDirectory)/docs/uno-port.md" Pack="true" Visible="false" PackagePath="README.md" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All"/>

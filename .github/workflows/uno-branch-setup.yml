@@ -1,0 +1,33 @@
+name: UnoEdit repository diagnostics
+
+on:
+  push:
+    branches: [port/unoedit]
+    paths: ['.github/workflows/uno-branch-setup.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: read
+  checks: read
+
+jobs:
+  diagnose:
+    if: github.repository == 'wieslawsoltes/AvaloniaEdit' && github.ref == 'refs/heads/port/unoedit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report repository and Pages configuration
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY" --jq '{default_branch,has_pages}'
+          gh api "repos/$GITHUB_REPOSITORY/pages" --jq '{html_url,build_type,status,source}'
+      - name: Report failed deployment annotations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # This deployment failed before runner logs were created. Check-run
+          # annotations explain the environment policy without modifying it.
+          gh api "repos/$GITHUB_REPOSITORY/check-runs/113845954617/annotations" --jq '.[] | {message,title,annotation_level}'
+          echo 'Default branch update was attempted in run 37937609916 and rejected with HTTP 403. No administrative or environment policy was changed.'

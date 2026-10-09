@@ -1,0 +1,21 @@
+<Project Sdk="Uno.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-desktop</TargetFramework>
+    <UnoFeatures>SkiaRenderer</UnoFeatures>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <!-- Uno desktop is a multi-OS target, not NUnit's named Desktop OS. -->
+    <GenerateSupportedOSPlatformAttribute>false</GenerateSupportedOSPlatformAttribute>
+    <!-- The runner executes on Uno's real UI thread on Windows/macOS/Linux.
+         The synthetic Desktop OS attribute makes NUnit skip the whole assembly.
+         Suppress only its call-site analyzer here, never in shipped libraries. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <SignAssembly>false</SignAssembly>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/UnoEdit.Uno/UnoEdit.Uno.csproj" />
+    <PackageReference Include="NUnit" />
+  </ItemGroup>
+</Project>

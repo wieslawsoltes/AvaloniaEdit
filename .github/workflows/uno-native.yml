@@ -1,0 +1,187 @@
+name: Uno native backend
+
+on:
+  push:
+    branches: [port/unoedit]
+  pull_request:
+    branches: [port/unoedit]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uno-native-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+# The migration PR targeting master receives these checks from its port/unoedit
+# push. Future feature PRs target the active Uno branch. Do not build and cancel
+# the same source twice through both push and pull_request migration events.
+jobs:
+  core:
+    name: Core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Test shared engine, native input and protected sections
+        run: dotnet test test/UnoEdit.Core.Tests/UnoEdit.Core.Tests.csproj -c Release --logger "trx;LogFileName=core.trx" --results-directory artifacts/tests/core
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: uno-core-${{ matrix.os }}
+          path: artifacts/tests
+          if-no-files-found: warn
+          retention-days: 14
+
+  rendering:
+    name: Native shaped rendering and build tools
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Test package validation and test-result gates
+        run: python3 -m unittest discover -s test -p test_build_tools.py -v
+      - name: Test native text shaping and viewport
+        run: dotnet test test/UnoEdit.Rendering.Skia.Tests/UnoEdit.Rendering.Skia.Tests.csproj -c Release --logger "trx;LogFileName=rendering.trx" --results-directory artifacts/tests/rendering
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: uno-rendering-validation
+          path: artifacts/tests
+          if-no-files-found: warn
+          retention-days: 14
+
+  packages:
+    name: Native NuGet packages and independent consumers
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Install browser library toolchain
+        run: dotnet workload install wasm-tools --skip-manifest-update
+      - name: Validate all three NuGet packages and independent consumers
+        run: |
+          mkdir -p artifacts
+          python3 tools/build.py pack > artifacts/package-validation.log 2>&1 || { tail -120 artifacts/package-validation.log; exit 1; }
+          tail -30 artifacts/package-validation.log
+          cat artifacts/packages/validation.json
+      - name: Record package source revision
+        if: always()
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/package-source-revision.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: uno-native-packages
+          path: |
+            artifacts/packages
+            artifacts/package-validation.log
+            artifacts/package-source-revision.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  native-tests:
+    name: Original snippets and native extension APIs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Build the real Uno NUnit test host
+        run: dotnet build test/UnoEdit.Uno.Tests/UnoEdit.Uno.Tests.csproj -c Release -p:UnoEditTargetFrameworks=net10.0-desktop
+      - name: Execute original snippet and native popup tests on the Uno UI thread
+        run: xvfb-run -a timeout 120s dotnet run --project test/UnoEdit.Uno.Tests/UnoEdit.Uno.Tests.csproj -c Release --no-build
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: uno-native-extension-tests
+          path: artifacts/tests/native
+          if-no-files-found: error
+          retention-days: 14
+
+  applications:
+    name: Uno desktop and browser runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Install browser toolchain
+        run: dotnet workload install wasm-tools --skip-manifest-update
+      - name: Build native desktop sample
+        run: |
+          mkdir -p artifacts
+          python3 tools/build.py desktop > artifacts/desktop.log 2>&1 || { tail -100 artifacts/desktop.log; exit 1; }
+          tail -10 artifacts/desktop.log
+      - name: Execute native controls, highlighting and protected edits on Linux
+        env:
+          UNOEDIT_NATIVE_CHECKS: '1'
+        run: |
+          xvfb-run -a timeout 90s dotnet run --project src/UnoEdit.Uno.Demo/UnoEdit.Uno.Demo.csproj -c Release -f net10.0-desktop --no-build > artifacts/native-runtime.log 2>&1 || { tail -100 artifacts/native-runtime.log; exit 1; }
+          cat artifacts/native-runtime.log
+      - name: Publish native WebAssembly sample
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: |
+          python3 tools/build.py browser --base-path "/$REPOSITORY_NAME/" > artifacts/browser-build.log 2>&1 || { tail -100 artifacts/browser-build.log; exit 1; }
+          tail -10 artifacts/browser-build.log
+      - name: Install pinned browser test runner
+        run: |
+          npm install --prefix tools --no-save --package-lock=false playwright@1.64.0
+          tools/node_modules/.bin/playwright install --with-deps chromium > artifacts/playwright-install.log 2>&1
+      - name: Verify exact static site with real keyboard and pointer input
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: node tools/browser-smoke.mjs artifacts/site "$REPOSITORY_NAME"
+      - name: Record source revision and test summary
+        if: always()
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/source-revision.txt
+          test ! -f artifacts/browser-tests/results.json || cat artifacts/browser-tests/results.json
+      - name: Surface failed browser diagnostics
+        if: failure()
+        run: |
+          test ! -f artifacts/browser-tests/failure-state.json || cat artifacts/browser-tests/failure-state.json
+          test ! -f artifacts/browser-tests/console.log || tail -100 artifacts/browser-tests/console.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: uno-application-validation
+          path: |
+            artifacts/site
+            artifacts/browser-tests
+            artifacts/source-revision.txt
+            artifacts/*.binlog
+            artifacts/*.log
+          if-no-files-found: warn
+          retention-days: 7

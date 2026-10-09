@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <PackageId>UnoEdit.Rendering.Skia</PackageId>
+    <Version>0.1.0-alpha.1</Version>
+    <Description>Native UnoEdit viewport, shaped text, hit testing and bounded line-layout cache.</Description>
+    <PackageTags>uno;editor;skia;virtualization</PackageTags>
+    <SignAssembly>false</SignAssembly>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../UnoEdit.Core/UnoEdit.Core.csproj" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.HarfBuzz" />
+    <PackageReference Include="Topten.RichTextKit" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,98 @@
+name: Validate native highlighting migration
+
+on:
+  push:
+    branches: [port/unoedit]
+    paths: ['.github/workflows/port-highlighting.yml', 'tools/port-highlighting.py']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: unoedit-highlighting-migration
+  cancel-in-progress: true
+
+jobs:
+  migrate:
+    if: github.repository == 'wieslawsoltes/AvaloniaEdit' && github.ref == 'refs/heads/port/unoedit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Preserve original source and assign its exact local revision
+        run: |
+          python3 tools/port-highlighting.py
+          git add src test
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'port: preserve original XSHD highlighter and integrate native styled rendering'
+          fi
+          # This local commit is not pushed until every validation below passes.
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/source-revision.txt
+      - name: Install browser workload
+        run: dotnet workload install wasm-tools --skip-manifest-update
+      - name: Build native desktop with original highlighting
+        run: |
+          dotnet build src/UnoEdit.Uno.Demo/UnoEdit.Uno.Demo.csproj -c Release -f net10.0-desktop -bl:artifacts/desktop.binlog > artifacts/desktop.log 2>&1 || { tail -120 artifacts/desktop.log; exit 1; }
+          tail -20 artifacts/desktop.log
+      - name: Execute native Uno control and highlighting checks on Linux
+        env:
+          UNOEDIT_NATIVE_CHECKS: '1'
+        run: |
+          xvfb-run -a timeout 90s dotnet run --project src/UnoEdit.Uno.Demo/UnoEdit.Uno.Demo.csproj -c Release -f net10.0-desktop --no-build > artifacts/native-runtime.log 2>&1 || { tail -100 artifacts/native-runtime.log; exit 1; }
+          cat artifacts/native-runtime.log
+      - name: Run original, core and native rendering regressions
+        run: python3 tools/build.py test
+      - name: Publish actual Uno browser app
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: |
+          python3 tools/build.py browser --base-path "/$REPOSITORY_NAME/" > artifacts/browser.log 2>&1 || { tail -120 artifacts/browser.log; exit 1; }
+          grep -E 'Build succeeded|Pages site prepared|UnoEdit.* ->' artifacts/browser.log | tail -10
+      - name: Run native-control highlighting and real browser-input checks
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: |
+          npm install --prefix tools --no-save --package-lock=false playwright@1.64.0
+          tools/node_modules/.bin/playwright install --with-deps chromium > artifacts/playwright-install.log 2>&1
+          node tools/browser-smoke.mjs artifacts/browser "$REPOSITORY_NAME"
+      - name: Push only the fully validated source revision
+        run: |
+          # A normal fast-forward push fails safely if another writer advanced
+          # the branch. Never force-push or drop someone else's changes.
+          git push origin HEAD:refs/heads/port/unoedit
+      - name: Surface failure diagnostics
+        if: failure()
+        run: |
+          test ! -f artifacts/browser-tests/failure-state.json || cat artifacts/browser-tests/failure-state.json
+          test ! -f artifacts/browser-tests/console.log || tail -80 artifacts/browser-tests/console.log
+      - name: Preserve source patch and validation evidence
+        if: always()
+        env:
+          START_REVISION: ${{ github.sha }}
+        run: |
+          mkdir -p artifacts
+          git diff "$START_REVISION" -- src test > artifacts/highlighting.patch
+          git ls-files --others --exclude-standard src test > artifacts/new-source-files.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: unoedit-highlighting-validation
+          path: |
+            artifacts/tests
+            artifacts/browser-tests
+            artifacts/*.log
+            artifacts/*.binlog
+            artifacts/*.patch
+            artifacts/*.txt
+          if-no-files-found: error
+          retention-days: 14
