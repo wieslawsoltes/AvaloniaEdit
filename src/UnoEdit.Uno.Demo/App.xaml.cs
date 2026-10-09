@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using UnoEdit.Document;
+using UnoEdit.Highlighting;
 using Windows.Foundation;
 
 namespace UnoEdit.Uno.Demo;
@@ -42,6 +43,7 @@ public sealed class DemoPage : Page
 
     public DemoPage()
     {
+        _smoke = Environment.GetEnvironmentVariable("UNOEDIT_NATIVE_CHECKS") == "1";
 #if __WASM__
         _smoke = global::Uno.Foundation.WebAssemblyRuntime.InvokeJS("new URLSearchParams(location.search).get('smoke') === '1' ? 'yes' : 'no'") == "yes";
 #endif
@@ -63,6 +65,15 @@ public sealed class DemoPage : Page
         Grid.SetRow(toolbarScroll, 1);
         root.Children.Add(toolbarScroll);
         toolbar.Children.Add(_samples);
+        var languages = new ComboBox { Width = 150 };
+        languages.Items.Add("Plain text");
+        foreach (var definition in HighlightingManager.Instance.HighlightingDefinitions)
+            languages.Items.Add(definition.Name);
+        languages.SelectionChanged += (_, _) => _editor.SyntaxHighlighting =
+            HighlightingManager.Instance.GetDefinition(languages.SelectedItem as string);
+        languages.SelectedItem = "C#";
+        AutomationProperties.SetName(languages, "Syntax highlighting language");
+        toolbar.Children.Add(languages);
         AddButton(toolbar, "Undo", () => _editor.Undo());
         AddButton(toolbar, "Redo", () => _editor.Redo());
         _largeDocumentButton = AddButton(toolbar, "100,000 lines", LoadLargeDocument);
@@ -80,7 +91,7 @@ public sealed class DemoPage : Page
         var findBar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(12, 6, 12, 0) };
         findBar.Children.Add(_search);
         AddButton(findBar, "Find next", FindNext);
-        var notice = new TextBlock { Text = "Preview: native editing and virtualization. Full completion, snippets, TextMate and IME parity are still in progress.", FontSize = 11, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 680 };
+        var notice = new TextBlock { Text = "Native editing, virtualization and original XSHD highlighting. Completion, snippets, TextMate and full IME parity remain in progress.", FontSize = 11, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 680 };
         findBar.Children.Add(notice);
         Grid.SetRow(findBar, 3);
         root.Children.Add(findBar);
@@ -94,7 +105,11 @@ public sealed class DemoPage : Page
         {
             if (_samples.SelectedItem is not string name) return;
             using var stream = typeof(DemoPage).Assembly.GetManifestResourceStream("Samples." + name);
-            if (stream != null) _editor.Load(stream);
+            if (stream != null)
+            {
+                _editor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinitionByExtension(Path.GetExtension(name));
+                _editor.Load(stream);
+            }
         };
         _editor.TextChanged += (_, _) => UpdateStatus();
         _editor.SelectionChanged += (_, _) => UpdateStatus();
@@ -110,6 +125,12 @@ public sealed class DemoPage : Page
             {
                 try { _controlChecks = NativeControlChecks.Run(); }
                 catch (Exception error) { _error = error.ToString(); Console.Error.WriteLine(error); }
+            }
+            if (Environment.GetEnvironmentVariable("UNOEDIT_NATIVE_CHECKS") == "1")
+            {
+                foreach (var check in _controlChecks) Console.WriteLine("PASS: " + check);
+                Console.WriteLine(_error ?? "Native Uno control and highlighting checks passed.");
+                Environment.Exit(_error == null ? 0 : 1);
             }
             _editor.TextArea.Focus(FocusState.Programmatic);
             UpdateStatus();

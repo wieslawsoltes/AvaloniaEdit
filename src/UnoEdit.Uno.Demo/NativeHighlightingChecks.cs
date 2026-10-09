@@ -32,6 +32,7 @@ internal static class NativeHighlightingChecks
         Require(definitions.Count >= 21, "All original built-in definitions must be embedded");
         foreach (var definition in definitions)
         {
+            Console.WriteLine("Validating native highlighting: " + definition.Name);
             Require(definition.MainRuleSet != null, "Missing main rule set for " + definition.Name);
             using var highlighter = new DocumentHighlighter(new TextDocument("class Example { }\n<!-- html -->\n# sample"), definition);
             for (var line = 1; line <= highlighter.Document.LineCount; line++)

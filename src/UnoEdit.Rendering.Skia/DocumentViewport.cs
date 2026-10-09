@@ -11,7 +11,7 @@ namespace UnoEdit.Rendering.Skia;
 /// tree. Only visible lines are shaped; an LRU cap bounds retained layouts.
 /// Text, caret, selection and hit testing use the same shaped line objects.
 /// </summary>
-public sealed class DocumentViewport : IDisposable
+public sealed partial class DocumentViewport : IDisposable
 {
     private sealed class Entry
     {
@@ -49,6 +49,7 @@ public sealed class DocumentViewport : IDisposable
             ThrowIfDisposed();
             if (value == null) throw new ArgumentNullException(nameof(value));
             if (ReferenceEquals(value, _document)) return;
+            DetachLineStyleSource();
             _document.Changing -= OnChanging;
             _document.Changed -= OnChanged;
             ClearCache();
@@ -249,7 +250,7 @@ public sealed class DocumentViewport : IDisposable
             }
             Remove(node);
         }
-        var layout = new TextLineLayout(_document.GetText(line.Offset, line.Length), _style, wrapWidth);
+        var layout = new TextLineLayout(_document.GetText(line.Offset, line.Length), _style, wrapWidth, GetLineStyles(line));
         LayoutCreationCount++;
         _heights.SetHeight(line, Math.Max(DefaultLineHeight, layout.Height));
         _extentWidth = Math.Max(_extentWidth, layout.Width);
@@ -316,7 +317,8 @@ public sealed class DocumentViewport : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        _document.Changing -= OnChanging;
+        DetachLineStyleSource();
+            _document.Changing -= OnChanging;
         _document.Changed -= OnChanged;
         ClearCache();
         _heights.Dispose();

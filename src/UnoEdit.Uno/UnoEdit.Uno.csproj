@@ -16,4 +16,9 @@
     <ProjectReference Include="../UnoEdit.Core/UnoEdit.Core.csproj" />
     <ProjectReference Include="../UnoEdit.Rendering.Skia/UnoEdit.Rendering.Skia.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Highlighting/Resources/*.xshd;Highlighting/Resources/*.xsd">
+      <LogicalName>UnoEdit.Highlighting.Resources.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
 </Project>

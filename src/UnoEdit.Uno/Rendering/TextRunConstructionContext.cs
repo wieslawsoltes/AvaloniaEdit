@@ -76,6 +76,6 @@ internal sealed class TextRunConstructionContext : ITextRunConstructionContext
             throw new ArgumentOutOfRangeException(nameof(offset));
         if (offset >= _offset && offset - _offset <= _text.Length && length <= _text.Length - (offset - _offset))
             return new StringSegment(_text, offset - _offset, length);
-        return new StringSegment(Document.GetText(offset, length));
+        return new StringSegment(Document.GetText(offset, length), 0, length);
     }
 }

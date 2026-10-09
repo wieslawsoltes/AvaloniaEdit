@@ -66,6 +66,8 @@ internal static class NativeControlChecks
         catch (ObjectDisposedException) { threw = true; }
         Require(threw, "IDisposable dispatch must dispose owned viewport resources");
         checks.Add("Concrete and IDisposable cleanup are idempotent and release owned resources");
+        checks.AddRange(NativeHighlightingChecks.Run());
+        checks.AddRange(LegacyHighlightingChecks.Run());
         return checks.ToArray();
     }
 

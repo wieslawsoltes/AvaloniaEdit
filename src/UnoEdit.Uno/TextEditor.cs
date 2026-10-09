@@ -18,7 +18,7 @@ namespace UnoEdit;
 /// The migration baseline remains separately buildable until the remaining
 /// completion, snippet, folding-adornment and extension APIs are ported.
 /// </summary>
-public class TextEditor : UserControl, IDisposable
+public partial class TextEditor : UserControl, IDisposable
 {
     private readonly long[] _appearanceCallbacks;
     private readonly DependencyProperty[] _appearanceProperties;
@@ -167,6 +167,7 @@ public class TextEditor : UserControl, IDisposable
         TextArea.Document = newDocument ?? new TextDocument();
         UpdateReadOnly();
         if (newDocument != null) TextDocumentWeakEventManager.TextChanged.AddHandler(newDocument, OnDocumentTextChanged);
+        ResetSyntaxHighlighting();
         DocumentChanged?.Invoke(this, new DocumentChangedEventArgs(oldDocument, newDocument));
         OnTextChanged(EventArgs.Empty);
     }
@@ -221,6 +222,7 @@ public class TextEditor : UserControl, IDisposable
         if (Options != null) Options.PropertyChanged -= OnOptionsChanged;
         for (var i = 0; i < _appearanceProperties.Length; i++)
             UnregisterPropertyChangedCallback(_appearanceProperties[i], _appearanceCallbacks[i]);
+        DisposeSyntaxHighlighting();
         TextArea.Dispose();
         TextChanged = null;
         DocumentChanged = null;
