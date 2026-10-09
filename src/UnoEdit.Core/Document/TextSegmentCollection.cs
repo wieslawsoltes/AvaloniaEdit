@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2014 AlphaSierraPapa for the SharpDevelop Team
+// Copyright (c) 2014 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -24,7 +24,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using UnoEdit.Utils;
-using Avalonia.Threading;
+
 
 namespace UnoEdit.Document
 {
@@ -91,7 +91,7 @@ namespace UnoEdit.Document
             if (textDocument == null)
                 throw new ArgumentNullException(nameof(textDocument));
 
-            Dispatcher.UIThread.VerifyAccess();
+            textDocument.VerifyAccess();
             _isConnectedToDocument = true;
             TextDocumentWeakEventManager.Changed.AddHandler(textDocument, OnDocumentChanged);
         }

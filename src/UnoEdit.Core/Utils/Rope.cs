@@ -26,6 +26,8 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 
+using UnoEdit.Internal;
+
 namespace UnoEdit.Utils
 {
     /// <summary>

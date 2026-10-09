@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/UnoEdit.Core/UnoEdit.Core.csproj" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <Compile Include="../UnoEdit.Tests/Document/*.cs" Link="Document/%(Filename)%(Extension)" />
+    <Compile Include="../UnoEdit.Tests/Utils/*.cs" Exclude="../UnoEdit.Tests/Utils/ExtensionMethodsTests.cs" Link="Utils/%(Filename)%(Extension)" />
+    <Compile Include="../UnoEdit.Tests/Search/FindTests.cs" Link="Search/FindTests.cs" />
+  </ItemGroup>
+</Project>

@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2014 AlphaSierraPapa for the SharpDevelop Team
+// Copyright (c) 2014 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -21,7 +21,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using Avalonia.Threading;
+
 
 namespace UnoEdit.Document
 {
@@ -682,7 +682,7 @@ namespace UnoEdit.Document
         {
             get
             {
-                Dispatcher.UIThread.VerifyAccess();
+                _document.VerifyAccess();
                 return GetByNumber(1 + index);
             }
             set => throw new NotSupportedException();
@@ -692,7 +692,7 @@ namespace UnoEdit.Document
         {
             get
             {
-                Dispatcher.UIThread.VerifyAccess();
+                _document.VerifyAccess();
                 return LineCount;
             }
         }
@@ -701,7 +701,7 @@ namespace UnoEdit.Document
 
         int IList<DocumentLine>.IndexOf(DocumentLine item)
         {
-            Dispatcher.UIThread.VerifyAccess();
+            _document.VerifyAccess();
             if (item == null || item.IsDeleted)
                 return -1;
             var index = item.LineNumber - 1;
@@ -758,13 +758,13 @@ namespace UnoEdit.Document
 
         public IEnumerator<DocumentLine> GetEnumerator()
         {
-            Dispatcher.UIThread.VerifyAccess();
+            _document.VerifyAccess();
             return Enumerate();
         }
 
         private IEnumerator<DocumentLine> Enumerate()
         {
-            Dispatcher.UIThread.VerifyAccess();
+            _document.VerifyAccess();
             var line = _root.LeftMost;
             while (line != null)
             {

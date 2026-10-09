@@ -10,4 +10,6 @@
   <Project Path="src/UnoEdit.TextMate/UnoEdit.TextMate.csproj" />
   <Project Path="src/UnoEdit/UnoEdit.csproj" />
   <Project Path="test/UnoEdit.Tests/UnoEdit.Tests.csproj" />
+  <Project Path="src/UnoEdit.Core/UnoEdit.Core.csproj" />
+  <Project Path="test/UnoEdit.Core.Tests/UnoEdit.Core.Tests.csproj" />
 </Solution>
