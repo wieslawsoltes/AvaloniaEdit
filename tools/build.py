@@ -146,7 +146,8 @@ def validate_packages(directory: Path, version: str) -> list[dict]:
 
 def verify_package_consumer(directory: Path, version: str, configuration: str) -> None:
     """Build outside the source tree, using only the newly packed NuGet binaries."""
-    with tempfile.TemporaryDirectory(prefix='unoedit-package-consumer-') as temporary:
+    with tempfile.TemporaryDirectory(prefix='unoedit-package-consumer-') as temporary, \
+            tempfile.TemporaryDirectory(prefix='unoedit-package-cache-') as cache:
         consumer = Path(temporary)
         shutil.copy2(ROOT / 'global.json', consumer / 'global.json')
         config = ET.Element('configuration')
@@ -196,10 +197,11 @@ public static class PackageConsumer
 ''', encoding='utf-8')
         # An isolated cache prevents a previously installed package with the
         # same prerelease version from making this validation a false positive.
-        # Source mapping also prevents an identically named public package from
-        # winning a race against the artifact feed.
+        # It is outside the consumer directory so SDK source/resource globs
+        # cannot accidentally compile files shipped inside dependency packages.
+        # Source mapping makes native packages come only from the artifact feed.
         run('dotnet', 'restore', 'Consumer.csproj', '--configfile', 'NuGet.Config',
-            '--packages', str(consumer / 'packages'), cwd=consumer)
+            '--packages', cache, cwd=consumer)
         for framework in ('net10.0-desktop', 'net10.0-browserwasm'):
             run('dotnet', 'build', 'Consumer.csproj', '-c', configuration, '-f', framework, '--no-restore', cwd=consumer)
 
