@@ -33,7 +33,8 @@ public sealed class DemoPage : Page
     private readonly TextBlock _status = new() { FontSize = 12, Margin = new Thickness(12, 5, 12, 5) };
     private readonly TextBox _search = new() { PlaceholderText = "Find text", Width = 160 };
     private readonly ComboBox _samples = new() { Width = 200, PlaceholderText = "Original sample files" };
-    private readonly bool _smoke;
+    private readonly bool _smoke = false;
+    private string[] _controlChecks = Array.Empty<string>();
     private string _error;
     private bool _diagnosticsQueued;
     private bool _loaded;
@@ -105,6 +106,11 @@ public sealed class DemoPage : Page
         Loaded += (_, _) =>
         {
             _loaded = true;
+            if (_smoke && _controlChecks.Length == 0)
+            {
+                try { _controlChecks = NativeControlChecks.Run(); }
+                catch (Exception error) { _error = error.ToString(); Console.Error.WriteLine(error); }
+            }
             _editor.TextArea.Focus(FocusState.Programmatic);
             UpdateStatus();
             QueueDiagnostics();
@@ -182,6 +188,7 @@ public sealed class DemoPage : Page
                 X = origin.X, Y = origin.Y, Width = view.ActualWidth, Height = view.ActualHeight,
                 LargeButtonX = button.X + _largeDocumentButton.ActualWidth / 2,
                 LargeButtonY = button.Y + _largeDocumentButton.ActualHeight / 2,
+                ControlChecks = _controlChecks,
                 Error = _error
             };
             global::Uno.Foundation.WebAssemblyRuntime.InvokeJS("globalThis.__unoEditTestState = " + JsonSerializer.Serialize(state, BrowserJsonContext.Default.BrowserState) + ";");
@@ -207,6 +214,7 @@ internal sealed class BrowserState
     public double Height { get; set; }
     public double LargeButtonX { get; set; }
     public double LargeButtonY { get; set; }
+    public string[] ControlChecks { get; set; }
     public string Error { get; set; }
 }
 
