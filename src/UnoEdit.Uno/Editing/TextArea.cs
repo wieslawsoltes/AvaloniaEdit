@@ -16,7 +16,7 @@ using Windows.UI.Core;
 namespace UnoEdit.Editing;
 
 /// <summary>Native Uno input and scroll host over the shared document engine.</summary>
-public class TextArea : UserControl, IDisposable
+public class TextArea : UserControl
 {
     private readonly ScrollBar _vertical = new() { Orientation = Orientation.Vertical, Width = 14 };
     private readonly ScrollBar _horizontal = new() { Orientation = Orientation.Horizontal, Height = 14 };
@@ -47,8 +47,8 @@ public class TextArea : UserControl, IDisposable
         Grid.SetRow(_horizontal, 1);
         layout.Children.Add(_horizontal);
         Content = layout;
-        _vertical.ValueChanged += (_, e) => { if (!_updatingScrollBars) TextView.ScrollToVerticalOffset(e.NewValue); };
-        _horizontal.ValueChanged += (_, e) => { if (!_updatingScrollBars) TextView.ScrollToHorizontalOffset(e.NewValue); };
+        _vertical.ValueChanged += (_, e) => { if (!_updatingScrollBars && !_disposed) TextView.ScrollToVerticalOffset(e.NewValue); };
+        _horizontal.ValueChanged += (_, e) => { if (!_updatingScrollBars && !_disposed) TextView.ScrollToHorizontalOffset(e.NewValue); };
         TextView.Rendered += (_, _) => QueueScrollBarUpdate();
         TextView.ScrollOffsetChanged += (_, _) => QueueScrollBarUpdate();
         Session.Changed += OnSessionChanged;
@@ -59,9 +59,9 @@ public class TextArea : UserControl, IDisposable
         TextView.PointerReleased += OnPointerReleased;
         TextView.PointerCaptureLost += (_, _) => _selecting = false;
         TextView.PointerWheelChanged += OnPointerWheelChanged;
-        GotFocus += (_, _) => { _focused = true; TextView.DrawCaret = true; _caretTimer.Start(); };
+        GotFocus += (_, _) => { if (_disposed) return; _focused = true; TextView.DrawCaret = true; _caretTimer.Start(); };
         LostFocus += (_, _) => { _focused = false; TextView.DrawCaret = false; _caretTimer.Stop(); _pendingHighSurrogate = null; };
-        Loaded += (_, _) => { if (_focused) _caretTimer.Start(); TextView.Redraw(); };
+        Loaded += (_, _) => { if (_disposed) return; if (_focused) _caretTimer.Start(); TextView.Redraw(); };
         Unloaded += (_, _) => { _caretTimer.Stop(); _selecting = false; TextView.ReleasePointerCaptures(); };
         _caretTimer.Tick += (_, _) => TextView.DrawCaret = _focused && !TextView.DrawCaret;
         var menu = new MenuFlyout();
@@ -198,6 +198,7 @@ public class TextArea : UserControl, IDisposable
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
+        if (_disposed) return;
         var point = e.GetCurrentPoint(TextView);
         if (!point.Properties.IsLeftButtonPressed && e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Mouse) return;
         Focus(FocusState.Pointer);
@@ -210,7 +211,7 @@ public class TextArea : UserControl, IDisposable
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (!_selecting || e.Pointer.PointerId != _capturedPointer) return;
+        if (_disposed || !_selecting || e.Pointer.PointerId != _capturedPointer) return;
         var point = e.GetCurrentPoint(TextView).Position;
         if (point.Y < 0) TextView.ScrollToVerticalOffset(TextView.VerticalOffset - TextView.DefaultLineHeight);
         else if (point.Y > TextView.ActualHeight) TextView.ScrollToVerticalOffset(TextView.VerticalOffset + TextView.DefaultLineHeight);
@@ -220,7 +221,7 @@ public class TextArea : UserControl, IDisposable
 
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
-        if (!_selecting || e.Pointer.PointerId != _capturedPointer) return;
+        if (_disposed || !_selecting || e.Pointer.PointerId != _capturedPointer) return;
         _selecting = false;
         TextView.ReleasePointerCapture(e.Pointer);
         e.Handled = true;
@@ -228,6 +229,7 @@ public class TextArea : UserControl, IDisposable
 
     private void OnPointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
+        if (_disposed) return;
         var properties = e.GetCurrentPoint(TextView).Properties;
         var delta = properties.MouseWheelDelta / 120.0 * TextView.DefaultLineHeight * 3;
         if (properties.IsHorizontalMouseWheel || (e.KeyModifiers & VirtualKeyModifiers.Shift) != 0)
@@ -239,6 +241,7 @@ public class TextArea : UserControl, IDisposable
 
     private void OnSessionChanged(object sender, EventArgs e)
     {
+        if (_disposed) return;
         TextView.EnsureCaretVisible();
         TextView.DrawCaret = _focused;
         Caret.NotifyPositionChanged();
@@ -276,7 +279,7 @@ public class TextArea : UserControl, IDisposable
     private void AddMenuCommand(MenuFlyout menu, string title, Func<Task> command)
     {
         var item = new MenuFlyoutItem { Text = title };
-        item.Click += async (_, _) => { try { await command(); } catch (Exception error) { ReportInputError(error); } };
+        item.Click += async (_, _) => { if (_disposed) return; try { await command(); } catch (Exception error) { ReportInputError(error); } };
         menu.Items.Add(item);
     }
 
@@ -286,18 +289,23 @@ public class TextArea : UserControl, IDisposable
         InputError?.Invoke(this, error);
     }
 
-    public void Dispose()
+    protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
-        _disposed = true;
-        _caretTimer.Stop();
-        TextView.ReleasePointerCaptures();
-        Session.Changed -= OnSessionChanged;
-        TextView.Dispose();
-        Session.Dispose();
-        SelectionChanged = null;
-        SearchRequested = null;
-        InputError = null;
+        if (disposing && !_disposed)
+        {
+            _disposed = true;
+            _caretTimer.Stop();
+            TextView.ReleasePointerCaptures();
+            KeyDown -= OnEditorKeyDown;
+            CharacterReceived -= OnCharacterReceived;
+            Session.Changed -= OnSessionChanged;
+            TextView.Dispose();
+            Session.Dispose();
+            SelectionChanged = null;
+            SearchRequested = null;
+            InputError = null;
+        }
+        base.Dispose(disposing);
     }
 }
 
