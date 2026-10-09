@@ -78,13 +78,36 @@ jobs:
       - name: Build native desktop sample
         run: dotnet build src/UnoEdit.Uno.Demo/UnoEdit.Uno.Demo.csproj -c Release -f net10.0-desktop -bl:desktop.binlog
       - name: Publish native WebAssembly sample
-        run: dotnet publish src/UnoEdit.Uno.Demo/UnoEdit.Uno.Demo.csproj -c Release -f net10.0-browserwasm -p:WasmShellWebAppBasePath=/${{ github.event.repository.name }}/ -o artifacts/browser -bl:browser.binlog
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: dotnet publish src/UnoEdit.Uno.Demo/UnoEdit.Uno.Demo.csproj -c Release -f net10.0-browserwasm -p:WasmShellWebAppBasePath=/$REPOSITORY_NAME/ -o artifacts/browser -bl:browser.binlog
+      - name: Install pinned browser test runner
+        run: |
+          npm install --prefix tools --no-save --package-lock=false playwright@1.64.0
+          tools/node_modules/.bin/playwright install --with-deps chromium
+      - name: Verify published application with real keyboard and pointer input
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: node tools/browser-smoke.mjs artifacts/browser "$REPOSITORY_NAME"
+      - name: Record source revision
+        if: always()
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/source-revision.txt
+      - name: Surface browser diagnostics
+        if: failure()
+        run: |
+          test ! -f artifacts/browser-tests/results.json || cat artifacts/browser-tests/results.json
+          test ! -f artifacts/browser-tests/failure-state.json || cat artifacts/browser-tests/failure-state.json
+          test ! -f artifacts/browser-tests/console.log || tail -100 artifacts/browser-tests/console.log
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: uno-application-validation
           path: |
             artifacts/browser
+            artifacts/browser-tests
+            artifacts/source-revision.txt
             desktop.binlog
             browser.binlog
           if-no-files-found: warn
