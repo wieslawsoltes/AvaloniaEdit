@@ -1,143 +1,234 @@
 # UnoEdit migration
 
-This branch is an **in-progress port**, not a complete public-API-compatible
-replacement for AvaloniaEdit. The original editor implementations and tests are
-retained as a regression baseline. Renaming a namespace or passing those
-baseline tests is not evidence that every original UI feature works in Uno.
+This branch is an **in-progress native Uno Platform port**, not a complete
+public-API-compatible replacement for AvaloniaEdit. Original implementations and
+tests remain available as a regression baseline. Renaming a namespace or passing
+those baseline tests does not establish native Uno UI parity.
 
 ## Toolchain
 
 `global.json` pins .NET SDK 10.0.401 and Uno.Sdk 6.7.30. The SDK version was checked
 against the stable Uno template release on 2026-10-09. Native rendering packages
-are centrally pinned and isolated from the Avalonia baseline's graphics versions;
-NuGet auditing and warnings-as-errors remain enabled.
+are centrally pinned and isolated from the Avalonia baseline's graphics versions.
+NuGet auditing and compiler warnings-as-errors remain enabled.
 
 Install the .NET SDK selected by `global.json`, Python 3.10 or newer, and the
-`wasm-tools` workload for browser builds. Node.js is only required for browser
+`wasm-tools` workload for browser builds. Node.js is required for browser
 verification, not for the editor itself.
 
 ## Source layout
 
 | Project | Purpose and current boundary |
 | --- | --- |
-| `UnoEdit.Core` | Original document, rope, line/height indexing, undo, search and indentation implementations; framework-neutral native input state. |
-| `UnoEdit.Rendering.Skia` | Shaped text, UTF-16/scalar/tab mapping, hit testing, selection painting and indexed viewport with a 256-line LRU cache. |
-| `UnoEdit.Uno` | Real Uno `TextEditor`, `TextArea`, `TextView` and caret controls; an incomplete subset of the original editor's UI and extension APIs. |
-| `UnoEdit.Uno.Demo` | Native desktop/browser preview, original sample text resources, large-file exercise and opt-in browser diagnostics. |
-| `UnoEdit`, `UnoEdit.TextMate`, `UnoEdit.Demo` | Renamed Avalonia implementation retained for regression comparison; these projects have **not** become native Uno implementations. |
+| `UnoEdit.Core` | Original document, rope, undo, line/height indexing, search, indentation and read-only-section providers; framework-neutral native input state. |
+| `UnoEdit.Rendering.Skia` | Shaped text, UTF-16/scalar/tab mapping, styled runs, hit testing, selection painting and an indexed viewport with a 256-line LRU layout cache. |
+| `UnoEdit.Uno` | Native Uno `TextEditor`, `TextArea`, `TextView` and caret controls; original XSHD highlighting adapted to native types; still an incomplete subset of the original UI and extension APIs. |
+| `UnoEdit.Uno.Demo` | Desktop/browser preview, original sample text resources, large-file exercise and opt-in native-control/browser checks. |
+| `UnoEdit`, `UnoEdit.TextMate`, `UnoEdit.Demo` | Renamed Avalonia implementations retained for regression comparison. These entire projects have **not** become native Uno implementations. |
 | `UnoEdit.Tests` | Original regression suite against the retained baseline, including extracted-core type forwards. |
-| `UnoEdit.Core.Tests` | Original framework-neutral regressions plus ownership, native input and height-index tests. |
-| `UnoEdit.Rendering.Skia.Tests` | Executable native shaping, hit-test, wrapping and cache-bound tests. |
+| `UnoEdit.Core.Tests` | Original framework-neutral regressions plus ownership, input, protected sections and height-index checks. |
+| `UnoEdit.Rendering.Skia.Tests` | Executable native shaping, styling, hit-test, wrapping and cache-bound tests. |
 
-Editor namespace prefixes were renamed to `UnoEdit`. Extracted public core types
-are forwarded from the baseline UI assembly to preserve their identity for its
-consumers. Native framework types necessarily differ; the final Uno API mapping
-is not complete. Do not reference both UI implementations in one application:
-they currently intentionally contain overlapping editor type names.
+Namespaces use `UnoEdit`. Extracted public core types are forwarded from the
+baseline assembly to preserve their identity for its consumers. Native framework
+types necessarily differ; the final Uno API mapping is not complete. Do not
+reference both UI implementations in one application: they contain overlapping
+editor type names.
+
+## Native highlighting
+
+`TextEditor.SyntaxHighlighting` accepts the original `IHighlightingDefinition`
+contract. `HighlightingManager.Instance` supplies the original embedded language
+definitions and extension mapping. Each editor/document owns its own incremental
+`DocumentHighlighter` state; document rebinding and disposal detach the previous
+state.
+
+The original XSHD loaders, lexical-state tracking and rich-text/HTML paths are
+retained and adapted to native Uno colors, brushes and font properties. Both
+current and legacy XSHD formats have native runtime checks. Styled rendering uses
+the same shaped runs for painting, selection and caret geometry, including font
+sizes, weights, backgrounds and decorations.
+
+This is **not** a claim that TextMate integration or every original visual-line
+transformer/generator API has been ported. `UnoEdit.TextMate` still uses the
+retained Avalonia UI baseline.
+
+## Native protected document sections
+
+`TextArea.ReadOnlySectionProvider` uses the original
+`IReadOnlySectionProvider` and `TextSegmentReadOnlySectionProvider<T>` APIs, now in
+`UnoEdit.Core`. The original provider implementation and its connected segment
+tracking are preserved; the baseline assembly forwards their public types.
+
+Native insertion consults `CanInsert`. Selection replacement follows the original
+provider contract: replace the **last** deletable interval, delete earlier editable
+intervals, and preserve protected text between them. No editable interval means
+no replacement. Read-only providers must return ordered, nonoverlapping intervals
+inside the requested range; the native session validates and snapshots those
+intervals before applying edits. A provider that changes the document while an
+edit is being planned is rejected rather than applying stale offsets.
+
+Typing, Enter, Tab, deletion, selected-text replacement and clipboard paste share
+the protected-edit path. Block indentation skips disallowed insertion points;
+unindent removes only editable whitespace. Multi-interval edits form one undo
+group and one session notification. Rejected Backspace/Delete does not move the
+caret or create a selection. The native `ClearSelection`,
+`ReplaceSelectionWithText` and `RemoveSelectedText` entry points are provided.
+
+Whole-editor `IsReadOnly` is an additional restriction; toggling it does not
+replace a custom section provider. As in the original editor, this is an **input
+policy**, not a security boundary for `TextDocument`: explicit programmatic
+changes and undo retain their document semantics. Full rectangular selection and
+command-extension parity are separate remaining work.
 
 ## Build and test
 
-Run these commands from the repository root:
+Run from the repository root:
 
 ```sh
+python3 -m unittest discover -s test -p test_build_tools.py -v
 python3 tools/build.py test
 python3 tools/build.py desktop --install-workloads
 python3 tools/build.py browser --base-path /AvaloniaEdit/
 python3 tools/build.py pack --version 0.1.0-alpha.1
 ```
 
-On Windows, use `python` instead of `python3` where appropriate. The `test` target
-runs all three test projects and rejects missing TRX results, zero executed tests,
-and failures. It records passed/failed/not-executed counts instead of treating a
-successful build as a successful test run. `core`, `rendering`, and `baseline`
-run individual suites. `all` runs tests, builds, publishing and package creation.
+On Windows, use `python` instead of `python3` where appropriate. `test` runs all
+three .NET test projects and rejects missing TRX results, zero executed tests and
+failed runs. It records passed/failed/not-executed counts. `core`, `rendering` and
+`baseline` run individual suites. `all` runs tests, builds, browser publishing
+and package validation.
 
-Browser output is placed in `artifacts/browser`; the normalized static site is
-`artifacts/site`. `build.json` identifies the source revision and explicitly marks
-the deployment as an API-incomplete preview. Packages and SHA-256 checksums are
-written to `artifacts/packages`.
+Browser output is `artifacts/browser`; the normalized static site is
+`artifacts/site`. `build.json` identifies the exact source revision and marks it
+as an API-incomplete preview. Serve the site over HTTP(S), not a `file://` URL.
 
-To verify the browser application:
+### Native runtime and browser checks
+
+On Linux with Xvfb installed, after building desktop:
+
+```sh
+UNOEDIT_NATIVE_CHECKS=1 xvfb-run -a timeout 90s dotnet run \
+  --project src/UnoEdit.Uno.Demo/UnoEdit.Uno.Demo.csproj \
+  -c Release -f net10.0-desktop --no-build
+```
+
+This starts the real Uno application and executes control/highlighting/protected
+editing assertions on its UI thread. The process exits with a failure code when
+an assertion fails. It is not a substitute for interactive testing across all
+desktop operating systems, input methods and accessibility tools.
+
+For the browser:
 
 ```sh
 npm install --prefix tools --no-save --package-lock=false playwright@1.64.0
 tools/node_modules/.bin/playwright install --with-deps chromium
-node tools/browser-smoke.mjs artifacts/browser AvaloniaEdit
+node tools/browser-smoke.mjs artifacts/site AvaloniaEdit
 ```
 
-The test hosts the published bytes under the repository subpath, not at `/`.
-It exercises real browser keyboard/pointer events, selection replacement,
-undo/redo, clipboard Unicode/tab input, grapheme deletion, large-document
-navigation and resizing. The opt-in `?smoke=1` application exposes read-only
-state; JavaScript does not mutate the C# document to simulate successful input.
-It also runs seven native-control checks on the real Uno UI thread, covering
-property binding, null documents, stream ownership and `IDisposable` dispatch.
-Failures retain screenshots, console output, diagnostic state and a Playwright
-trace in `artifacts/browser-tests`.
+The smoke test serves published bytes under the repository subpath. It exercises
+actual keyboard/pointer input, selection replacement, undo/redo, Unicode/tab
+clipboard input, grapheme deletion, 100,000-line navigation and resizing. The
+opt-in `?smoke=1` app also executes native property/document/stream/disposal,
+highlighting and protected-edit checks. Its JavaScript diagnostic state is
+read-only; tests do not mutate the document through a JavaScript back door.
+Failures retain screenshots, console output, state and a Playwright trace in
+`artifacts/browser-tests`.
+
+### NuGet package validation
+
+All three native packages share one prerelease version. `pack` cleans its output
+directory, creates NuGet and symbol packages, verifies their identities, README,
+compiled libraries and native dependency versions, and rejects direct Avalonia
+baseline dependencies.
+
+It then restores an independent consumer **outside the repository** using only
+the newly packed `UnoEdit.Uno` package. There are no project references or inherited
+repository package pins. NuGet source mapping restricts `UnoEdit.*` to the local
+artifact feed, and an isolated package cache prevents an older package with the
+same prerelease version from producing a false-positive build. Both desktop and
+browser consumer targets must compile before `validation.json` and SHA-256
+checksums are written. `verify-packages` rechecks an existing output set.
+
+These checks verify package consumption, not universal public API parity. Adding
+this validation code is not itself evidence of a passing run; use the actual CI
+result at the source revision being evaluated.
 
 ## CI and releases
 
 - `UnoEdit CI` validates the retained editor regression baseline.
-- `Uno native backend` runs core tests on Windows, Linux and macOS; native
-  renderer tests; desktop compilation; browser publishing and input smoke tests.
-- `UnoEdit GitHub Pages` runs all three suites, publishes the browser and tests
-  that exact output before allowing deployment.
+- `Uno native backend` validates core tests on Windows, Linux and macOS, native
+  rendering, native Linux control checks, browser input and package consumption.
+- `UnoEdit GitHub Pages` runs all three suites, publishes and tests the exact
+  static site before deployment. After deployment it verifies the public source
+  revision, rather than inferring success from artifact upload.
 - `UnoEdit prerelease` accepts tags such as `unoedit-v0.1.0-alpha.1`. It validates
-  all suites and browser behavior before attaching source, browser, NuGet and
-  symbol packages with checksums to a GitHub prerelease. It rejects stable tags
-  while the port is incomplete. Optional NuGet publication uses the repository's
-  `NUGET_API_KEY`; without it, packages remain downloadable release assets.
+  suites and browser behavior before attaching source, browser, NuGet and symbols
+  with checksums to a GitHub prerelease. Stable tags are rejected while the port
+  is incomplete. Optional NuGet publication uses the configured repository
+  `NUGET_API_KEY`; otherwise packages remain release assets.
 
-Adding a workflow does not prove it passed or deployed. Consult the actual run
-and source revision when evaluating a build. No stable release is asserted by
-this document.
+Source-migration workflows preserve the original implementations, validate their
+resulting source commit, and push only after validation. They use a normal
+fast-forward push and never overwrite concurrent work. No stable release or
+end-to-end public package publication is asserted by this document.
 
-## GitHub Pages
+## Branch and GitHub Pages configuration
 
-The Pages workflow supports `master`, `port/unoedit` and manual dispatch. It never
-deploys pull-request artifacts from forks or bypasses failed input tests. The
-repository needs **Settings > Pages > Build and deployment > Source: GitHub
-Actions**, and the `github-pages` environment must allow the selected branch.
-The default `GITHUB_TOKEN` cannot grant itself the administrative permission to
-enable a disabled Pages site. The deployment step reports that configuration
-failure rather than claiming publication succeeded.
+The active development and publication branch is `port/unoedit`. The Pages
+workflow explicitly targets that branch; it does not depend on merging the
+incomplete port into `master` and never deploys fork pull-request artifacts.
 
-For the current repository name, use `/AvaloniaEdit/` as the build base path.
-After a repository rename, workflows derive the new name automatically. For
-local/custom-domain builds use the appropriate `--base-path`, normally `/`.
+On 2026-10-09 the repository's Pages site was confirmed enabled with the
+**GitHub Actions** build source. Two administrative settings remained unresolved:
+
+1. The request to change the default branch from `master` to `port/unoedit` was
+   rejected with HTTP 403 (`Resource not accessible by integration`). A repository
+   administrator can set **Settings > General > Default branch > port/unoedit**.
+2. The `github-pages` environment rejected deployment because `port/unoedit` was
+   not an allowed branch. Add that specific branch under **Settings > Environments
+   > github-pages > Deployment branches and tags**, retaining other protections.
+
+These policies are not disabled or bypassed by the workflows. Enabling Pages
+alone does not change the environment's branch allowlist. Once it permits the
+branch, rerun the failed deployment while its artifact is retained or run a fresh
+Pages build. Until a deployment and public revision check pass, a successful build
+or artifact upload must not be described as a published site.
+
+The current repository name requires `/AvaloniaEdit/` as the browser base path.
+After a repository rename, workflows derive its new name automatically. For
+local/custom-domain hosting choose the appropriate `--base-path`, normally `/`.
 
 ## Performance model
 
 The viewport uses the original augmented height tree to find visible document
 lines without scanning preceding lines. It shapes only lines needed for painting
-or caret/hit testing, reuses cached layouts, and limits retained layouts to 256
-lines. Rendering tests enforce cache/visible-line bounds on 100,000-line documents.
-These are algorithmic checks, not universal FPS or typing-latency guarantees.
+or caret/hit testing, reuses cached layouts, and bounds retained layouts to 256
+lines. Tests exercise viewport/cache bounds on 100,000-line documents. These are
+algorithmic checks, not universal FPS or typing-latency guarantees.
 
-Initial document/index construction still scales with document size. Shaping and
-Unicode mapping scale with individual line length; the cache cap is by line count,
-not byte size. Width/height estimates for unseen wrapped lines are refined when
-visited. Very long lines, stale off-screen measurements, bidi/visual-column
-navigation, touch behavior and allocation/latency benchmarks require additional
-work and validation.
+Initial document/index construction scales with document size. Shaping and
+Unicode mapping scale with individual line length; the cache is bounded by line
+count, not byte size. Unseen wrapped-line measurements are estimates refined on
+visits. Very long lines, stale off-screen measurements, bidi/visual-column
+navigation, touch behavior and allocation/latency profiling remain important.
 
 ## Remaining compatibility work
 
-The native control is not yet a drop-in replacement. Work still includes the
-original highlighting/TextMate APIs and integration, completion/overload windows,
-original selection/read-only-section and command extensibility, full snippets,
-folding adornments, visual-line generators/transformers/background renderers,
-search-panel API parity, templates/styles, drag/drop, full IME/composition and
-accessibility automation. Native control lifecycle must be validated across
-unload/reload, retained documents, focus changes and actual desktop hosts.
+The native control is not a drop-in replacement yet. Remaining work includes
+TextMate integration, completion/overload windows, full selection/command
+extensibility, snippets, folding adornments, original visual-line
+generators/transformers/background renderers, search-panel API parity,
+templates/styles, drag/drop, complete IME/composition and accessibility. Broader
+native lifecycle and interactive Windows/macOS/Linux validation remain.
 
-The demo exposes a useful subset of the original sample experience; loading the
-original text resources is not equivalent to porting every original sample UI
-feature. Keep this distinction when reviewing test results and package names.
+The preview uses original sample text resources but does not yet reproduce every
+original sample UI feature. Preserve this distinction in test reports, package
+descriptions and release notes.
 
 ## Attribution
 
-Original source copyright/license notices and upstream links are retained.
-SkiaSharp, HarfBuzzSharp and RichTextKit are consumed through their NuGet packages
-under their respective licenses. This project is not affiliated with the separate
-LeXtudio UnoEdit implementation.
+Original copyright/license notices and upstream links are retained. SkiaSharp,
+HarfBuzzSharp and RichTextKit are NuGet dependencies under their respective
+licenses. This project is not affiliated with the separate LeXtudio UnoEdit
+implementation.
