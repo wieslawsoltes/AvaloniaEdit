@@ -16,7 +16,10 @@
     <PackageVersion Include="TextMateSharp" Version="2.0.3" />
     <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.3" />
   </ItemGroup>
-  <ItemGroup Label="Native Uno rendering">
+  <!-- Keep the original Avalonia tests on their original transitive graphics
+       versions. The two UI stacks are separate migration targets, not loaded
+       into one process. These pins belong only to the native Uno projects. -->
+  <ItemGroup Label="Native Uno rendering" Condition="'$(MSBuildProjectName)' == 'UnoEdit.Rendering.Skia' Or '$(MSBuildProjectName)' == 'UnoEdit.Rendering.Skia.Tests' Or '$(MSBuildProjectName)' == 'UnoEdit.Uno' Or '$(MSBuildProjectName)' == 'UnoEdit.Uno.Demo'">
     <PackageVersion Include="SkiaSharp" Version="3.119.2" />
     <PackageVersion Include="SkiaSharp.HarfBuzz" Version="3.119.2" />
     <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.2" />
