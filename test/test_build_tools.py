@@ -89,6 +89,7 @@ class PackageValidationTests(unittest.TestCase):
 
     def test_consumer_uses_isolated_cache_local_native_source_and_no_project_references(self):
         calls = []
+        caches = []
 
         def inspect(*args, cwd):
             calls.append(args)
@@ -103,7 +104,10 @@ class PackageValidationTests(unittest.TestCase):
             if args[1] == 'restore':
                 self.assertIn('--configfile', args)
                 cache = Path(args[args.index('--packages') + 1])
-                self.assertTrue(cache.is_relative_to(cwd))
+                self.assertFalse(cache.is_relative_to(cwd))
+                self.assertTrue(cache.name.startswith('unoedit-package-cache-'))
+                self.assertTrue(cache.is_dir())
+                caches.append(cache)
             else:
                 self.assertIn('--no-restore', args)
 
@@ -111,6 +115,8 @@ class PackageValidationTests(unittest.TestCase):
             build.verify_package_consumer(self.directory, VERSION, 'Release')
         self.assertEqual(len(calls), 3)
         self.assertEqual({call[call.index('-f') + 1] for call in calls[1:]}, {'net10.0-desktop', 'net10.0-browserwasm'})
+        self.assertEqual(len(caches), 1)
+        self.assertFalse(caches[0].exists())
 
 
 class TestResultValidationTests(unittest.TestCase):
