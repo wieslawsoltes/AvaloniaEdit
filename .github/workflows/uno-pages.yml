@@ -1,0 +1,89 @@
+name: UnoEdit GitHub Pages
+
+on:
+  push:
+    branches: [master, port/unoedit]
+    paths:
+      - '.github/workflows/uno-pages.yml'
+      - 'src/UnoEdit.Core/**'
+      - 'src/UnoEdit.Rendering.Skia/**'
+      - 'src/UnoEdit.Uno/**'
+      - 'src/UnoEdit.Uno.Demo/**'
+      - 'tools/build.py'
+      - 'tools/browser-smoke.mjs'
+      - 'global.json'
+      - 'Directory.Build.props'
+      - 'Directory.Packages.props'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unoedit-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Test all existing editor, core and renderer regressions
+        run: python3 tools/build.py test
+      - name: Publish the Uno browser application
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: python3 tools/build.py browser --install-workloads --base-path "/$REPOSITORY_NAME/"
+      - name: Install pinned browser verification tools
+        run: |
+          npm install --prefix tools --no-save --package-lock=false playwright@1.64.0
+          tools/node_modules/.bin/playwright install --with-deps chromium
+      - name: Verify the exact published app under the Pages subpath
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: node tools/browser-smoke.mjs artifacts/browser "$REPOSITORY_NAME"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: artifacts/site
+      - name: Surface failed browser diagnostics
+        if: failure()
+        run: |
+          test ! -f artifacts/browser-tests/results.json || cat artifacts/browser-tests/results.json
+          test ! -f artifacts/browser-tests/failure-state.json || cat artifacts/browser-tests/failure-state.json
+          test ! -f artifacts/browser-tests/console.log || tail -100 artifacts/browser-tests/console.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: unoedit-pages-validation
+          path: |
+            artifacts/tests
+            artifacts/browser-tests
+            artifacts/*.binlog
+          if-no-files-found: warn
+          retention-days: 14
+
+  deploy:
+    needs: build
+    if: github.repository_owner == 'wieslawsoltes' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/port/unoedit')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # The repository must have Settings > Pages > Source = GitHub Actions.
+      # GITHUB_TOKEN cannot grant itself the administration permission required
+      # to enable a previously disabled site; do not silently bypass that check.
+      - uses: actions/configure-pages@v5
+      - name: Deploy the verified browser sample
+        id: deployment
+        uses: actions/deploy-pages@v4
