@@ -41,7 +41,8 @@ jobs:
             echo 'Source changed; refusing to apply an ambiguous migration.' >&2
             exit 1
           fi
-          git add src test tools/browser-smoke.mjs
+          git add src test
+          git add -f tools/browser-smoke.mjs
           if ! git diff --cached --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
