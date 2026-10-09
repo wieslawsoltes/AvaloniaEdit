@@ -163,6 +163,7 @@ public partial class TextArea : IRoutedCommandBindable, ITextEditorComponent
     private void InitializeExtensibility()
     {
         _lastDocument = Document;
+        _lastDocument.UpdateFinished += OnExtendedUpdateFinished;
         _lastOptions = Options;
         _lastOptions.PropertyChanged += OnExtendedOptionChanged;
         DefaultInputHandler = new TextAreaDefaultInputHandler(this);
@@ -176,11 +177,19 @@ public partial class TextArea : IRoutedCommandBindable, ITextEditorComponent
     }
     private void OnExtendedFocus(object sender, RoutedEventArgs e) { RoutedCommand.SetFocusedTarget(this); EnsureBrowserKeyboardFocus(); }
     private void OnExtendedOptionChanged(object sender, PropertyChangedEventArgs e) => OptionChanged?.Invoke(this, e);
+    private void OnExtendedUpdateFinished(object sender, EventArgs args)
+    {
+        if (_disposed || !ReferenceEquals(sender, Document)) return;
+        TextView.EnsureCaretVisible(); QueueScrollBarUpdate();
+    }
     private void NotifyExtendedDocumentChanged()
     {
         if (ReferenceEquals(_lastDocument, Document)) return;
         if (_stackedHandlers.Count > 0) PopStackedInputHandler(_stackedHandlers[0]);
-        var old = _lastDocument; _lastDocument = Document;
+        var old = _lastDocument;
+        old.UpdateFinished -= OnExtendedUpdateFinished;
+        _lastDocument = Document;
+        _lastDocument.UpdateFinished += OnExtendedUpdateFinished;
         DocumentChanged?.Invoke(this, new DocumentChangedEventArgs(old, Document));
     }
     private void NotifyExtendedOptionsChanged()
@@ -212,6 +221,7 @@ public partial class TextArea : IRoutedCommandBindable, ITextEditorComponent
     }
     private void DisposeExtensibility()
     {
+        if (_lastDocument != null) _lastDocument.UpdateFinished -= OnExtendedUpdateFinished;
         if (_stackedHandlers.Count > 0) PopStackedInputHandler(_stackedHandlers[0]);
         ActiveInputHandler = null;
         Session.Changed -= OnExtendedSessionChanged;

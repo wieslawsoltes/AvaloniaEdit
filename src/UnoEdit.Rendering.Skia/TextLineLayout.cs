@@ -25,7 +25,7 @@ public sealed record TextViewStyle
 /// HarfBuzz. All public offsets are UTF-16; the backend uses scalar indexes.
 /// Text, background, decorations, selections and caret geometry share one layout.
 /// </summary>
-public sealed class TextLineLayout : IDisposable
+public sealed partial class TextLineLayout : ITextLineLayout
 {
     private readonly TextBlock _block;
     private readonly int[] _utf16ToScalar;
@@ -35,7 +35,7 @@ public sealed class TextLineLayout : IDisposable
     public TextLineLayout(string text, TextViewStyle style, float? wrapWidth = null)
         : this(text, style, wrapWidth, null) { }
 
-    public TextLineLayout(string text, TextViewStyle style, float? wrapWidth, IReadOnlyList<TextStyleSpan> spans)
+    public TextLineLayout(string text, TextViewStyle style, float? wrapWidth, IReadOnlyList<TextStyleSpan> spans, float minimumLineHeight = 0)
     {
         if (text == null) throw new ArgumentNullException(nameof(text));
         if (style == null) throw new ArgumentNullException(nameof(style));
@@ -104,6 +104,7 @@ public sealed class TextLineLayout : IDisposable
             _block.Layout();
             Width = _block.MeasuredWidth;
             Height = Math.Max(style.FontSize, _block.MeasuredHeight);
+            InitializeRows(spans, minimumLineHeight);
         }
         catch { _block.Clear(); throw; }
 
@@ -119,22 +120,38 @@ public sealed class TextLineLayout : IDisposable
 
     public int Length { get; }
     public float Width { get; }
-    public float Height { get; }
+    public float Height { get; private set; }
     public int StyleRunCount { get; private set; }
 
-    private static Style CreateStyle(TextViewStyle basis, TextStyleSpan span) => new()
+    private static Style CreateStyle(TextViewStyle basis, TextStyleSpan span)
     {
-        FontFamily = span?.FontFamily ?? basis.FontFamily,
-        FontSize = span?.FontSize ?? basis.FontSize,
-        FontWeight = span?.FontWeight ?? 400,
-        FontItalic = span?.Italic ?? false,
-        TextColor = span?.Foreground ?? basis.Foreground,
-        BackgroundColor = span?.Background ?? SKColors.Transparent,
-        Underline = span?.Underline == true ? UnderlineStyle.Solid : UnderlineStyle.None,
-        StrikeThrough = span?.Strikethrough == true ? StrikeThroughStyle.Solid : StrikeThroughStyle.None
-    };
+        var style = new Style
+        {
+            FontFamily = span?.FontFamily ?? basis.FontFamily,
+            FontSize = span?.FontSize ?? basis.FontSize,
+            FontWeight = span?.FontWeight ?? 400,
+            FontItalic = span?.Italic ?? false,
+            TextColor = span?.Foreground ?? basis.Foreground,
+            BackgroundColor = span?.Background ?? SKColors.Transparent,
+            Underline = span?.Underline == true ? UnderlineStyle.Solid : UnderlineStyle.None,
+            StrikeThrough = span?.Strikethrough == true ? StrikeThroughStyle.Solid : StrikeThroughStyle.None
+        };
+        if (span?.ObjectWidth is float advance)
+        {
+            var probe = new TextBlock();
+            try
+            {
+                probe.AddText("\ufffc", style); probe.Layout();
+                style.LetterSpacing = advance - probe.MeasuredWidth;
+                style.TextColor = SKColors.Transparent;
+                style.Underline = UnderlineStyle.None; style.StrikeThrough = StrikeThroughStyle.None;
+            }
+            finally { probe.Clear(); }
+        }
+        return style;
+    }
 
-    private static void ValidateSpans(string text, IReadOnlyList<TextStyleSpan> spans)
+    private static void ValidateSpans(string text, IReadOnlyList<TextStyleSpan> spans, float minimumLineHeight = 0)
     {
         if (spans == null) return;
         var previousEnd = 0;
@@ -147,6 +164,13 @@ public sealed class TextLineLayout : IDisposable
                 throw new ArgumentException("Style runs must not split a UTF-16 surrogate pair.", nameof(spans));
             if (span.FontSize is float size && (!float.IsFinite(size) || size <= 0) || span.FontWeight is int weight && (weight < 1 || weight > 1000))
                 throw new ArgumentException("Style font size/weight is outside its supported range.", nameof(spans));
+            if (span.ObjectWidth.HasValue)
+            {
+                if (span.Length != 1 || text[span.Start] != '\ufffc' || !float.IsFinite(span.ObjectWidth.Value) || span.ObjectWidth < 0 ||
+                    span.ObjectHeight is not float height || !float.IsFinite(height) || height < 0 ||
+                    span.ObjectBaseline is not float baseline || !float.IsFinite(baseline) || baseline < 0 || baseline > height)
+                    throw new ArgumentException("Inline object metrics must describe one replacement character and a finite nonnegative box.", nameof(spans));
+            }
             previousEnd = end;
         }
         bool IsSurrogateInterior(int offset) => offset > 0 && offset < text.Length && char.IsSurrogatePair(text[offset - 1], text[offset]);
@@ -170,7 +194,7 @@ public sealed class TextLineLayout : IDisposable
     {
         ThrowIfDisposed();
         if (Length == 0) return 0;
-        var hit = _block.HitTest(x, y);
+        var hit = _block.HitTest(x, ToOriginalY(y));
         return _scalarToUtf16[Math.Clamp(hit.ClosestCodePointIndex, 0, _scalarToUtf16.Length - 1)];
     }
 
@@ -199,8 +223,8 @@ public sealed class TextLineLayout : IDisposable
             if (last <= first) continue;
             var x1 = run.GetXCoordOfCodePointIndex(first);
             var x2 = run.GetXCoordOfCodePointIndex(last);
-            rectangles.Add(new SKRect(Math.Min(x1, x2), run.Line.YCoord,
-                Math.Max(x1, x2), run.Line.YCoord + run.Line.Height));
+            var row = RowFor(run.Line);
+            rectangles.Add(new SKRect(Math.Min(x1, x2), row.Top, Math.Max(x1, x2), row.Top + row.Height));
         }
         return rectangles;
     }
@@ -209,7 +233,11 @@ public sealed class TextLineLayout : IDisposable
     {
         var index = GetScalarIndex(utf16Offset);
         var info = _block.GetCaretInfo(new CaretPosition(index));
-        return info.IsNone ? new SKRect(0, 0, 1, Height) : info.CaretRectangle;
+        if (info.IsNone) return new SKRect(0, 0, 1, Height);
+        var rect = info.CaretRectangle;
+        var row = GetRowByOffset(utf16Offset);
+        rect.Top = row.Top; rect.Bottom = row.Top + row.Height;
+        return rect;
     }
 
     public void Paint(SKCanvas canvas, float x, float y, int selectionStart = 0, int selectionLength = 0, SKColor? selectionColor = null)
@@ -223,7 +251,8 @@ public sealed class TextLineLayout : IDisposable
             Selection = selectionLength == 0 ? null : new TextRange(GetScalarIndex(selectionStart), GetScalarIndex(selectionStart + selectionLength)),
             SelectionColor = selectionColor ?? new SKColor(51, 119, 207, 100)
         };
-        _block.Paint(canvas, new SKPoint(x, y), options);
+        if (_adjustedRows) PaintRows(canvas, x, y, selectionStart, selectionLength, options.SelectionColor);
+        else _block.Paint(canvas, new SKPoint(x, y), options);
     }
 
     private void ThrowIfDisposed()
@@ -235,6 +264,7 @@ public sealed class TextLineLayout : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        DisposeRows();
         _block.Clear();
     }
 }

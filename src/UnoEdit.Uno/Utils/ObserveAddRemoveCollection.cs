@@ -26,7 +26,7 @@ namespace UnoEdit.Utils
     /// It is valid for the onAdd callback to throw an exception - this will prevent the new item from
     /// being added to the collection.
     /// </summary>
-    internal sealed class ObserveAddRemoveCollection<T> : Collection<T>
+    internal sealed class ObserveAddRemoveCollection<T> : ObservableCollection<T>
     {
         private readonly Action<T> _onAdd;
         private readonly Action<T> _onRemove;

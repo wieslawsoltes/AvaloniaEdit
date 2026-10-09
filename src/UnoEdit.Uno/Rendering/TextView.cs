@@ -1,5 +1,6 @@
 using System;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using SkiaSharp;
 using Uno.WinUI.Graphics2DSK;
 using UnoEdit.Document;
@@ -13,8 +14,16 @@ namespace UnoEdit.Rendering;
 /// Native Uno drawing surface. It shares the document-backed editing session
 /// with TextArea and draws directly into Uno's existing Skia canvas.
 /// </summary>
-public partial class TextView : SKCanvasElement, IDisposable
+public partial class TextView : Grid, IDisposable
 {
+    private sealed class Surface : SKCanvasElement
+    {
+        private readonly TextView _owner;
+        internal Surface(TextView owner) { _owner = owner; }
+        protected override void RenderOverride(SKCanvas canvas, Size area) => _owner.RenderOverride(canvas, area);
+    }
+    private readonly Surface _surface;
+    private void Invalidate() => _surface?.Invalidate();
     private readonly bool _ownsSession;
     private bool _drawCaret;
     private bool _disposed;
@@ -26,10 +35,14 @@ public partial class TextView : SKCanvasElement, IDisposable
 
     private TextView(EditorSession session, bool ownsSession)
     {
+        _surface = new Surface(this);
+        Children.Add(_surface);
+        Children.Add(_inlineLayer);
         Session = session ?? throw new ArgumentNullException(nameof(session));
         _ownsSession = ownsSession;
         Viewport = new DocumentViewport(session.Document);
         InitializeLayers();
+        InitializeVisualLines();
         Viewport.Invalidated += OnViewportInvalidated;
         Session.Changed += OnSessionChanged;
         SizeChanged += OnSizeChanged;
@@ -53,17 +66,19 @@ public partial class TextView : SKCanvasElement, IDisposable
         set { if (_disposed || _drawCaret == value) return; _drawCaret = value; Invalidate(); }
     }
 
-    public void Redraw() { if (!_disposed) Invalidate(); }
+    public void Redraw() { if (!_disposed) { _pipeline?.InvalidateAll(); Invalidate(); } }
     public void ScrollToHorizontalOffset(double offset) => Viewport.ScrollTo(offset, Viewport.VerticalOffset);
     public void ScrollToVerticalOffset(double offset) => Viewport.ScrollTo(Viewport.HorizontalOffset, offset);
     public void EnsureCaretVisible() => Viewport.EnsureCaretVisible(Session.CaretOffset);
     public int GetOffsetFromPoint(Point point) => Viewport.HitTest(point.X, point.Y);
 
-    protected override void RenderOverride(SKCanvas canvas, Size area)
+    private void RenderOverride(SKCanvas canvas, Size area)
     {
         if (_disposed) return;
         Viewport.SetViewport(area.Width, area.Height);
         Viewport.Render(canvas, Session, DrawCaret);
+        _visualLinesValid = true;
+        ArrangeInlineObjects();
         VisualLinesChanged?.Invoke(this, EventArgs.Empty);
         Rendered?.Invoke(this, EventArgs.Empty);
     }
@@ -76,13 +91,14 @@ public partial class TextView : SKCanvasElement, IDisposable
     private void OnSessionChanged(object sender, EventArgs e)
     {
         if (_disposed) return;
-        if (!ReferenceEquals(Viewport.Document, Session.Document)) Viewport.Document = Session.Document;
+        if (!ReferenceEquals(Viewport.Document, Session.Document)) { var old = Viewport.Document; Viewport.Document = Session.Document; RebindVisualLines(old); }
         Invalidate();
     }
 
     private void OnViewportInvalidated(object sender, EventArgs e)
     {
         if (_disposed) return;
+        _visualLinesValid = false;
         Invalidate();
         if (_lastHorizontalOffset == Viewport.HorizontalOffset && _lastVerticalOffset == Viewport.VerticalOffset) return;
         _lastHorizontalOffset = Viewport.HorizontalOffset;
@@ -100,6 +116,7 @@ public partial class TextView : SKCanvasElement, IDisposable
         Session.Changed -= OnSessionChanged;
         Viewport.Invalidated -= OnViewportInvalidated;
         DisposeLayers();
+        DisposeVisualLines();
         Viewport.Dispose();
         if (_ownsSession) Session.Dispose();
         VisualLinesChanged = null;

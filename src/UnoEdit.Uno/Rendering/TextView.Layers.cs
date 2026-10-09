@@ -17,8 +17,8 @@ public partial class TextView
     private void InitializeLayers()
     {
         _backgroundRenderers = new ObserveAddRemoveCollection<IBackgroundRenderer>(
-            value => { if (value == null) throw new ArgumentNullException(nameof(value)); if (value is ITextViewConnect connected) connected.AddToTextView(this); Redraw(); },
-            value => { if (value is ITextViewConnect connected) connected.RemoveFromTextView(this); Redraw(); });
+            value => { if (value == null) throw new ArgumentNullException(nameof(value)); if (value is ITextViewConnect connected) connected.AddToTextView(this); Invalidate(); },
+            value => { if (value is ITextViewConnect connected) connected.RemoveFromTextView(this); Invalidate(); });
         Viewport.RenderingLayer += OnRenderLayer;
     }
     private void OnRenderLayer(object sender, ViewportRenderEventArgs e)
@@ -32,7 +32,7 @@ public partial class TextView
             try { renderer.Draw(this, context); } finally { e.Canvas.RestoreToCount(count); }
         }
     }
-    public void InvalidateLayer(KnownLayer layer) => Redraw();
+    public void InvalidateLayer(KnownLayer layer) => Invalidate();
     private void DisposeLayers()
     { Viewport.RenderingLayer -= OnRenderLayer; _backgroundRenderers.Clear(); }
 }

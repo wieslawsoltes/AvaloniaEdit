@@ -3,6 +3,7 @@
 // This serves only the published files under the same subpath used by Pages.
 // Diagnostic state is read-only; all mutations go through actual UI input.
 import assert from 'node:assert/strict';
+import { verifyVisualExtensions } from './browser-visuals.mjs';
 import { verifyCompletionSnippets } from './browser-completion.mjs';
 import { createReadStream } from 'node:fs';
 import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
@@ -117,6 +118,7 @@ try {
   await page.screenshot({ path: path.join(output, 'unicode.png') });
   await verifySearchPanel({ page, wait, state, textIs, checks, output });
   await verifyCompletionSnippets({ page, wait, state, textIs, checks, output });
+  await verifyVisualExtensions({ page, wait, state, textIs, checks, output });
   current = await state();
   const largeStarted = performance.now();
   await page.mouse.click(current.LargeButtonX, current.LargeButtonY);

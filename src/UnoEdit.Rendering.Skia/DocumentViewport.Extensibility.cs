@@ -50,17 +50,19 @@ public sealed partial class DocumentViewport
         var result = new List<SKRect>(); var end = offset + length;
         foreach (var line in GetVisibleDocumentLines())
         {
-            if (line.EndOffset < offset || line.Offset > end) continue;
-            var from = Math.Clamp(offset - line.Offset, 0, line.Length);
-            var to = Math.Clamp(end - line.Offset, 0, line.Length);
-            if (from == to && length > 0 && end <= line.Offset) continue;
+            if (line.Offset > end) break;
             var layout = GetLayout(line);
+            var last = _cache[line].Value.LastLine;
+            if (last.EndOffset < offset) continue;
+            var from = Math.Clamp(offset - line.Offset, 0, layout.Length);
+            var to = Math.Clamp(end - line.Offset, 0, layout.Length);
+            if (from == to && length > 0 && end <= line.Offset) continue;
             var x = (float)(GutterWidth - _horizontalOffset); var y = (float)(_heights.GetVisualPosition(line) - _verticalOffset);
             foreach (var value in layout.GetRangeRectangles(from, Math.Max(0, to - from)))
             { var rect = value; rect.Offset(x, y); result.Add(rect); }
-            if (end > line.EndOffset && line.DelimiterLength != 0)
+            if (end > last.EndOffset && last.DelimiterLength != 0)
             {
-                var caret = layout.GetCaretRectangle(line.Length); caret.Offset(x, y);
+                var caret = layout.GetCaretRectangle(layout.Length); caret.Offset(x, y);
                 result.Add(new SKRect(caret.Left, caret.Top, extendLineEnds ? (float)_width : caret.Left + _style.FontSize * 0.65f, caret.Bottom));
             }
         }

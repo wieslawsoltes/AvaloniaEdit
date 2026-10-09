@@ -17,11 +17,17 @@ public interface ILineMarkerSource
     event EventHandler MarkersChanged;
 }
 
+/// <summary>Optional indexed range lookup used by folded or otherwise projected visual lines.</summary>
+public interface IDocumentRangeMarkerSource : ILineMarkerSource
+{
+    IReadOnlyList<TextRangeMarker> GetMarkers(int offset, int length, bool firstMatchOnly);
+}
+
 /// <summary>
 /// Indexed adapter from search results to visible-line markers. Paint never
 /// executes a search; invalidation immediately drops stale result coordinates.
 /// </summary>
-public sealed class SearchResultMarkerSource : ILineMarkerSource, IDisposable
+public sealed class SearchResultMarkerSource : IDocumentRangeMarkerSource, IDisposable
 {
     private readonly SearchSession _search;
     private IReadOnlyList<ISearchResult> _results = Array.Empty<ISearchResult>();
@@ -68,6 +74,22 @@ public sealed class SearchResultMarkerSource : ILineMarkerSource, IDisposable
         }
         return markers == null ? Array.Empty<TextRangeMarker>() : markers;
     }
+    public IReadOnlyList<TextRangeMarker> GetMarkers(int offset, int length, bool firstMatchOnly)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(SearchResultMarkerSource));
+        if (offset < 0 || length < 0 || offset > Document.TextLength || length > Document.TextLength - offset) throw new ArgumentOutOfRangeException(nameof(offset));
+        var end = offset + length; var low = 0; var high = _results.Count;
+        while (low < high) { var middle = low + (high - low) / 2; if (_results[middle].EndOffset < offset) low = middle + 1; else high = middle; }
+        List<TextRangeMarker> markers = null;
+        for (var i = low; i < _results.Count && _results[i].Offset <= end; i++)
+        {
+            var result = _results[i]; var from = Math.Max(offset, result.Offset); var to = Math.Min(end, result.EndOffset);
+            if (to <= from && result.Length != 0) continue;
+            markers ??= new(); markers.Add(new TextRangeMarker(from - offset, Math.Max(0, to - from), _color));
+            if (firstMatchOnly) break;
+        }
+        return markers == null ? Array.Empty<TextRangeMarker>() : markers;
+    }
     private void OnResultsChanged(object sender, EventArgs args) { _results = _search.Results; MarkersChanged?.Invoke(this, EventArgs.Empty); }
     private void OnInvalidated(object sender, EventArgs args) { _results = Array.Empty<ISearchResult>(); MarkersChanged?.Invoke(this, EventArgs.Empty); }
     public void Dispose()
@@ -106,27 +128,52 @@ public sealed partial class DocumentViewport
         if (_markerSource != null) _markerSource.MarkersChanged -= OnMarkersChanged;
         _markerSource = null;
     }
-    private void PaintLineMarkers(SKCanvas canvas, DocumentLine line, TextLineLayout layout, float x, float y)
+    private void PaintLineMarkers(SKCanvas canvas, DocumentLine line, DocumentLine lastLine, ITextLineLayout layout, float x, float y)
     {
         if (_markerSource == null) return;
         using var paint = new SKPaint { IsAntialias = false };
-        foreach (var marker in _markerSource.GetMarkers(line))
+        if (layout is IProjectedTextLineLayout projected && _markerSource is IDocumentRangeMarkerSource indexed)
         {
-            if (marker == null || marker.Start < 0 || marker.Length < 0 || marker.Start > line.Length || marker.Length > line.Length - marker.Start)
-                throw new InvalidOperationException("Marker source returned invalid line-relative coordinates.");
-            paint.Color = marker.Color;
-            foreach (var range in layout.GetRangeRectangles(marker.Start, marker.Length))
+            foreach (var source in projected.SourceSegments)
+                foreach (var marker in indexed.GetMarkers(line.Offset + source.Start, source.Length, source.IsAtomic))
+                {
+                    if (marker == null || marker.Start < 0 || marker.Length < 0 || marker.Start > source.Length || marker.Length > source.Length - marker.Start)
+                        throw new InvalidOperationException("Marker source returned invalid projected coordinates.");
+                    Draw(source.Start + marker.Start, marker.Length, marker.Color);
+                }
+            foreach (var marker in _markerSource.GetMarkers(lastLine))
+                if (marker.IncludesLineBreak) DrawDelimiter(marker.Color);
+            return;
+        }
+        // Generic line providers are asked only about document lines with a
+        // visible representation. Never enumerate an entire collapsed region.
+        var numbers = new SortedSet<int> { line.LineNumber, lastLine.LineNumber };
+        if (layout is IProjectedTextLineLayout visible)
+            foreach (var source in visible.SourceSegments)
+                numbers.Add(_document.GetLineByOffset(line.Offset + source.Start).LineNumber);
+        foreach (var number in numbers)
+        {
+            var current = _document.GetLineByNumber(number);
+            foreach (var marker in _markerSource.GetMarkers(current))
             {
-                var rectangle = range;
-                rectangle.Offset(x, y);
-                canvas.DrawRect(rectangle, paint);
+                if (marker == null || marker.Start < 0 || marker.Length < 0 || marker.Start > current.Length || marker.Length > current.Length - marker.Start)
+                    throw new InvalidOperationException("Marker source returned invalid line-relative coordinates.");
+                Draw(current.Offset - line.Offset + marker.Start, marker.Length, marker.Color);
+                if (marker.IncludesLineBreak && ReferenceEquals(current, lastLine)) DrawDelimiter(marker.Color);
             }
-            if (marker.IncludesLineBreak)
-            {
-                var caret = layout.GetCaretRectangle(line.Length);
-                canvas.DrawRect(x + caret.Left, y + caret.Top, _style.FontSize * 0.65f, Math.Max(1, caret.Height), paint);
-            }
+        }
+        void Draw(int start, int length, SKColor color)
+        {
+            paint.Color = color;
+            foreach (var range in layout.GetRangeRectangles(start, length))
+            { var rectangle = range; rectangle.Offset(x, y); canvas.DrawRect(rectangle, paint); }
             LastMarkerCount++;
+        }
+        void DrawDelimiter(SKColor color)
+        {
+            paint.Color = color;
+            var caret = layout.GetCaretRectangle(layout.Length);
+            canvas.DrawRect(x + caret.Left, y + caret.Top, _style.FontSize * 0.65f, Math.Max(1, caret.Height), paint);
         }
     }
 }

@@ -42,7 +42,7 @@ public partial class TextArea : UserControl, IDisposable
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        layout.Children.Add(TextView);
+        layout.Children.Add(InitializeMarginLayout());
         Grid.SetColumn(_vertical, 1);
         layout.Children.Add(_vertical);
         Grid.SetRow(_horizontal, 1);
@@ -239,7 +239,7 @@ public partial class TextArea : UserControl, IDisposable
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (_disposed) return;
+        if (_disposed || e.Handled) return;
         var point = e.GetCurrentPoint(TextView);
         if (!point.Properties.IsLeftButtonPressed && e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Mouse) return;
         Focus(FocusState.Pointer);
@@ -288,7 +288,10 @@ public partial class TextArea : UserControl, IDisposable
     private void OnSessionChanged(object sender, EventArgs e)
     {
         if (_disposed) return;
-        TextView.EnsureCaretVisible();
+        NotifyExtendedDocumentChanged();
+        // Document trackers (folds, lexical state, snippets) must finish their
+        // Changed callbacks before a synchronous caret query constructs lines.
+        if (!Document.IsInUpdate) TextView.EnsureCaretVisible();
         TextView.DrawCaret = _focused;
         Caret.NotifyPositionChanged();
         SelectionChanged?.Invoke(this, EventArgs.Empty);
@@ -337,10 +340,19 @@ public partial class TextArea : UserControl, IDisposable
 
     // Uno 6.7 has a nonvirtual FrameworkElement.Dispose method. The explicit
     // interface implementation is inherited from this reimplementation.
+    /// <summary>Raised before owned input, margins and rendering resources are released.</summary>
+    public event EventHandler Disposed;
+
     public new void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
+        try { Disposed?.Invoke(this, EventArgs.Empty); }
+        finally { Disposed = null; DisposeOwnedResources(); }
+    }
+
+    private void DisposeOwnedResources()
+    {
         _caretTimer.Stop();
         _caretTimer.Tick -= OnCaretTimerTick;
         TextView.ReleasePointerCaptures();
@@ -352,6 +364,7 @@ public partial class TextArea : UserControl, IDisposable
         TextView.PointerMoved -= OnPointerMoved;
         TextView.PointerReleased -= OnPointerReleased;
         TextView.PointerWheelChanged -= OnPointerWheelChanged;
+        _leftMargins?.Clear();
         TextView.Dispose();
         Session.Dispose();
         SelectionChanged = null;

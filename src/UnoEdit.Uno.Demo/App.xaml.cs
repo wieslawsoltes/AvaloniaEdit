@@ -81,6 +81,7 @@ public sealed partial class DemoPage : Page
         AddButton(toolbar, "Clear", () => _editor.Clear());
         AddButton(toolbar, "Find / Replace", () => { _editor.SearchPanel.IsReplaceMode = true; _editor.SearchPanel.Reactivate(); }, false);
         InitializeEditingFeatures(toolbar);
+        InitializeVisualFeatures(toolbar);
         var wrap = new CheckBox { Content = "Wrap" };
         wrap.Checked += (_, _) => _editor.WordWrap = true;
         wrap.Unchecked += (_, _) => _editor.WordWrap = false;
@@ -214,6 +215,11 @@ public sealed partial class DemoPage : Page
             var state = new BrowserState
             {
                 Ready = view.Viewport.RenderCount > 0,
+                FoldingCount = _folding?.AllFoldings.Count() ?? 0,
+                FoldedCount = _folding?.AllFoldings.Count(f => f.IsFolded) ?? 0,
+                FoldLabel = GetFoldLabel(),
+                InlineButton = GetInlineButton(),
+                InlineClicks = _inlineClicks,
                 CompletionOpen = _completion?.IsOpen == true,
                 CompletionSelected = _completion?.CompletionList.SelectedItem?.Text,
                 InsightOpen = _insight?.IsOpen == true,
@@ -251,6 +257,11 @@ public sealed partial class DemoPage : Page
 internal sealed class BrowserState
 {
     public bool Ready { get; set; }
+    public int FoldingCount { get; set; }
+    public int FoldedCount { get; set; }
+    public double[] FoldLabel { get; set; }
+    public double[] InlineButton { get; set; }
+    public int InlineClicks { get; set; }
     public bool CompletionOpen { get; set; }
     public string CompletionSelected { get; set; }
     public bool InsightOpen { get; set; }

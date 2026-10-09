@@ -38,7 +38,7 @@ public sealed partial class DocumentViewport
         {
             var next = node.Next;
             var line = node.Value.Line;
-            if (line.IsDeleted || line.LineNumber >= firstLine && line.LineNumber <= lastLine)
+            if (line.IsDeleted || node.Value.LastLine.LineNumber >= firstLine && line.LineNumber <= lastLine)
             {
                 if (!line.IsDeleted) _heights.SetHeight(line, DefaultLineHeight);
                 Remove(node);

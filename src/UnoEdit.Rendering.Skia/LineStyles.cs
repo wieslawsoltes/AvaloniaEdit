@@ -10,6 +10,10 @@ public sealed record TextStyleSpan(int Start, int Length)
 {
     public SKColor? Foreground { get; init; }
     public SKColor? Background { get; init; }
+    /// <summary>Exact advance for a single object-replacement character, or null for text.</summary>
+    public float? ObjectWidth { get; init; }
+    public float? ObjectHeight { get; init; }
+    public float? ObjectBaseline { get; init; }
     public string FontFamily { get; init; }
     public float? FontSize { get; init; }
     public int? FontWeight { get; init; }

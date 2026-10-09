@@ -16,7 +16,8 @@ public sealed partial class DocumentViewport : IDisposable
     private sealed class Entry
     {
         internal DocumentLine Line;
-        internal TextLineLayout Layout;
+        internal ITextLineLayout Layout;
+        internal DocumentLine LastLine;
         internal float? WrapWidth;
     }
 
@@ -51,6 +52,7 @@ public sealed partial class DocumentViewport : IDisposable
             if (ReferenceEquals(value, _document)) return;
             DetachLineStyleSource();
             DetachMarkerSource();
+            DetachLayoutSource();
             _document.Changing -= OnChanging;
             _document.Changed -= OnChanged;
             ClearCache();
@@ -143,9 +145,9 @@ public sealed partial class DocumentViewport : IDisposable
     {
         ThrowIfDisposed();
         if (offset < 0 || offset > _document.TextLength) throw new ArgumentOutOfRangeException(nameof(offset));
-        var line = _document.GetLineByOffset(offset);
+        var line = ResolveLine(_document.GetLineByOffset(offset));
         var layout = GetLayout(line);
-        var rectangle = layout.GetCaretRectangle(Math.Min(offset - line.Offset, line.Length));
+        var rectangle = layout.GetCaretRectangle(Math.Min(offset - line.Offset, layout.Length));
         rectangle.Offset((float)(GutterWidth - _horizontalOffset), (float)(_heights.GetVisualPosition(line) - _verticalOffset));
         return rectangle;
     }
@@ -154,7 +156,7 @@ public sealed partial class DocumentViewport : IDisposable
     {
         ThrowIfDisposed();
         if (!double.IsFinite(x) || !double.IsFinite(y)) throw new ArgumentOutOfRangeException(nameof(x));
-        var line = _heights.GetLineByVisualPosition(Math.Max(0, y + _verticalOffset));
+        var line = ResolveLine(_heights.GetLineByVisualPosition(Math.Max(0, y + _verticalOffset)));
         var layout = GetLayout(line);
         return line.Offset + layout.HitTest((float)(x + _horizontalOffset - GutterWidth), (float)(y + _verticalOffset - _heights.GetVisualPosition(line)));
     }
@@ -194,21 +196,22 @@ public sealed partial class DocumentViewport : IDisposable
             while (line != null && top < _height)
             {
                 var layout = GetLayout(line);
+                var endLine = LastLine(line, layout);
                 var rowHeight = _heights.GetHeight(line);
                 if (ReferenceEquals(line, caretLine))
                 {
                     paint.Color = _style.CurrentLine;
                     canvas.DrawRect(0, (float)top, (float)_width, (float)rowHeight, paint);
                 }
-                var from = session == null ? 0 : Math.Clamp(session.SelectionStart - line.Offset, 0, line.Length);
-                var to = session == null ? 0 : Math.Clamp(session.SelectionStart + session.SelectionLength - line.Offset, 0, line.Length);
+                var from = session == null ? 0 : Math.Clamp(session.SelectionStart - line.Offset, 0, layout.Length);
+                var to = session == null ? 0 : Math.Clamp(session.SelectionStart + session.SelectionLength - line.Offset, 0, layout.Length);
                 canvas.Save();
                 canvas.ClipRect(new SKRect((float)GutterWidth, 0, (float)_width, (float)_height));
-                PaintLineMarkers(canvas, line, layout, (float)(GutterWidth - _horizontalOffset), (float)top);
+                PaintLineMarkers(canvas, line, endLine, layout, (float)(GutterWidth - _horizontalOffset), (float)top);
                 layout.Paint(canvas, (float)(GutterWidth - _horizontalOffset), (float)top, from, Math.Max(0, to - from), _style.Selection);
-                if (session != null && session.SelectionStart <= line.EndOffset && session.SelectionStart + session.SelectionLength > line.EndOffset && line.DelimiterLength != 0)
+                if (session != null && session.SelectionStart <= endLine.EndOffset && session.SelectionStart + session.SelectionLength > endLine.EndOffset && endLine.DelimiterLength != 0)
                 {
-                    var end = layout.GetCaretRectangle(line.Length);
+                    var end = layout.GetCaretRectangle(layout.Length);
                     paint.Color = _style.Selection;
                     canvas.DrawRect((float)(GutterWidth - _horizontalOffset) + end.Left, (float)top + end.Top, _style.FontSize * 0.65f, Math.Max(1, end.Height), paint);
                 }
@@ -243,7 +246,7 @@ public sealed partial class DocumentViewport : IDisposable
         }
     }
 
-    private TextLineLayout GetLayout(DocumentLine line)
+    private ITextLineLayout GetLayout(DocumentLine line)
     {
         var wrapWidth = _style.WordWrap ? (float?)Math.Max(1, _width - GutterWidth - 8) : null;
         if (_cache.TryGetValue(line, out var node))
@@ -256,11 +259,14 @@ public sealed partial class DocumentViewport : IDisposable
             }
             Remove(node);
         }
-        var layout = new TextLineLayout(_document.GetText(line.Offset, line.Length), _style, wrapWidth, GetLineStyles(line));
+        var layout = _layoutSource?.CreateLayout(line, _style, wrapWidth, _lineStyleSource) ?? new TextLineLayout(_document.GetText(line.Offset, line.Length), _style, wrapWidth, GetLineStyles(line));
+        var lastLine = LastLine(line, layout);
+        if (lastLine == null || lastLine.IsDeleted || lastLine.LineNumber < line.LineNumber || layout.Length != lastLine.EndOffset - line.Offset)
+        { layout.Dispose(); throw new InvalidOperationException("The projected layout has invalid document bounds."); }
         LayoutCreationCount++;
         _heights.SetHeight(line, Math.Max(DefaultLineHeight, layout.Height));
         _extentWidth = Math.Max(_extentWidth, layout.Width);
-        var entry = new Entry { Line = line, Layout = layout, WrapWidth = wrapWidth };
+        var entry = new Entry { Line = line, LastLine = lastLine, Layout = layout, WrapWidth = wrapWidth };
         _cache.Add(line, _lru.AddFirst(entry));
         while (_cache.Count > CacheCapacity) Remove(_lru.Last);
         return layout;
@@ -274,7 +280,7 @@ public sealed partial class DocumentViewport : IDisposable
         {
             var next = node.Next;
             var line = node.Value.Line;
-            if (line.IsDeleted || line.Offset <= last && line.EndOffset >= e.Offset)
+            if (line.IsDeleted || node.Value.LastLine.IsDeleted || line.Offset <= last && node.Value.LastLine.EndOffset >= e.Offset)
             {
                 if (!line.IsDeleted) _heights.SetHeight(line, DefaultLineHeight);
                 Remove(node);
@@ -326,6 +332,7 @@ public sealed partial class DocumentViewport : IDisposable
         if (_disposed) return;
         DetachLineStyleSource();
         DetachMarkerSource();
+        DetachLayoutSource();
         _document.Changing -= OnChanging;
         _document.Changed -= OnChanged;
         ClearCache();

@@ -16,36 +16,6 @@ public interface ITextRunConstructionContext
     StringSegment GetText(int offset, int length);
 }
 
-/// <summary>
-/// Native construction-time visual-line data. Layout and custom generator APIs
-/// are a separate migration boundary; this represents the real document line
-/// being shaped, not an Avalonia control or a replacement text document.
-/// </summary>
-public sealed class VisualLine
-{
-    internal VisualLine(TextView view, DocumentLine line)
-    {
-        TextView = view;
-        FirstDocumentLine = LastDocumentLine = line;
-    }
-    public TextView TextView { get; }
-    public DocumentLine FirstDocumentLine { get; }
-    public DocumentLine LastDocumentLine { get; }
-    public int StartOffset => FirstDocumentLine.Offset;
-    public int DocumentLength => LastDocumentLine.EndOffset - FirstDocumentLine.Offset;
-}
-
-/// <summary>Native font/brush values replacing framework-specific text-run properties.</summary>
-public sealed record TextRunProperties
-{
-    public FontFamily FontFamily { get; init; }
-    public double FontRenderingEmSize { get; init; }
-    public FontWeight FontWeight { get; init; } = Microsoft.UI.Text.FontWeights.Normal;
-    public FontStyle FontStyle { get; init; } = FontStyle.Normal;
-    public Brush ForegroundBrush { get; init; }
-    public Brush BackgroundBrush { get; init; }
-}
-
 internal sealed class TextRunConstructionContext : ITextRunConstructionContext
 {
     private readonly string _text;
@@ -58,13 +28,7 @@ internal sealed class TextRunConstructionContext : ITextRunConstructionContext
         _offset = line.Offset;
         _text = Document.GetText(line.Offset, line.Length);
         var style = view.Viewport.Style;
-        GlobalTextRunProperties = new TextRunProperties
-        {
-            FontFamily = new FontFamily(style.FontFamily),
-            FontRenderingEmSize = style.FontSize,
-            ForegroundBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(style.Foreground.Alpha, style.Foreground.Red, style.Foreground.Green, style.Foreground.Blue)),
-            BackgroundBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(style.Background.Alpha, style.Background.Red, style.Background.Green, style.Background.Blue))
-        };
+        GlobalTextRunProperties = global::UnoEdit.Rendering.GlobalTextRunProperties.Create(style);
     }
     public TextDocument Document { get; }
     public TextView TextView { get; }
