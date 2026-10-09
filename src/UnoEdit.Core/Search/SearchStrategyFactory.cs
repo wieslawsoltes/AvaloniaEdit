@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2014 AlphaSierraPapa for the SharpDevelop Team
+// Copyright (c) 2014 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -31,7 +31,14 @@ namespace UnoEdit.Search
         /// Creates a default ISearchStrategy with the given parameters.
         /// </summary>
         public static ISearchStrategy Create(string searchPattern, bool ignoreCase, bool matchWholeWords, SearchMode mode)
+            => Create(searchPattern, ignoreCase, matchWholeWords, mode, TimeSpan.FromSeconds(2));
+
+        /// <summary>Creates a strategy with an explicit finite regular-expression match budget.</summary>
+        public static ISearchStrategy Create(string searchPattern, bool ignoreCase, bool matchWholeWords, SearchMode mode, TimeSpan matchTimeout)
         {
+            if (matchTimeout.TotalMilliseconds < 1 || matchTimeout.TotalMilliseconds > int.MaxValue - 1)
+                throw new ArgumentOutOfRangeException(nameof(matchTimeout));
+            if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
             if (searchPattern == null)
                 throw new ArgumentNullException(nameof(searchPattern));
             var options = RegexOptions.Multiline;
@@ -50,7 +57,7 @@ namespace UnoEdit.Search
 
             try
             {
-                var pattern = new Regex(searchPattern, options);
+                var pattern = new Regex(searchPattern, options, matchTimeout);
                 return new RegexSearchStrategy(pattern, matchWholeWords);
             }
             catch (ArgumentException ex)
