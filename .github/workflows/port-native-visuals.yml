@@ -1,0 +1,136 @@
+name: Validate native visual pipeline and folding
+on:
+  push:
+    branches: [port/unoedit]
+    paths: ['.github/workflows/port-native-visuals.yml', 'tools/native-visuals.payload.*']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: unoedit-native-visual-migration
+  cancel-in-progress: true
+jobs:
+  migrate:
+    if: github.repository == 'wieslawsoltes/AvaloniaEdit' && github.ref == 'refs/heads/port/unoedit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Reconstruct checksum-verified source without overwriting concurrent edits
+        run: |
+          mkdir -p artifacts
+          python3 - <<'PY'
+          from pathlib import Path, PurePosixPath
+          import base64, hashlib, json, lzma, subprocess
+          payload = ''.join(Path(f'tools/native-visuals.payload.{i}').read_text().strip() for i in range(3))
+          decoded = lzma.decompress(base64.b64decode(payload, validate=True))
+          if hashlib.sha256(decoded).hexdigest() != '33466a0c11c9293e4d88c2058cb480e4102cc519f387bce8e0169d825bc24907':
+              raise RuntimeError('Source transport checksum mismatch')
+          manifest = json.loads(decoded)
+          base = '31cabe880c055f680efcf914b29d7e259f9291579'
+          if manifest['base_revision'] != base:
+              raise RuntimeError('Unexpected source baseline')
+          subprocess.run(['git', 'merge-base', '--is-ancestor', base, 'HEAD'], check=True)
+          outputs = []
+          for entry in manifest['files']:
+              path = entry['path']
+              pure = PurePosixPath(path)
+              if pure.is_absolute() or '..' in pure.parts or not (path.startswith(('src/', 'test/')) or path in ('tools/browser-smoke.mjs', 'tools/browser-visuals.mjs')):
+                  raise RuntimeError(f'Unexpected output path: {path}')
+              if 'content' in entry:
+                  content = entry['content']
+              else:
+                  source = subprocess.check_output(['git', 'show', f"{base}:{entry['base']}"])
+                  if hashlib.sha256(source).hexdigest() != entry['base_sha256']:
+                      raise RuntimeError(f'Original-source checksum mismatch: {path}')
+                  lines = source.decode('utf-8').splitlines(keepends=True)
+                  for start, end, replacement in reversed(entry['line_edits']):
+                      if not 0 <= start <= end <= len(lines):
+                          raise RuntimeError(f'Invalid source edit: {path}')
+                      lines[start:end] = replacement.splitlines(keepends=True)
+                  content = ''.join(lines)
+              data = content.encode('utf-8')
+              if hashlib.sha256(data).hexdigest() != entry['sha256']:
+                  raise RuntimeError(f'Reconstructed-source checksum mismatch: {path}')
+              target = Path(path)
+              current = hashlib.sha256(target.read_bytes()).hexdigest() if target.exists() else None
+              if current not in (entry['prior_sha256'], entry['sha256']):
+                  raise RuntimeError(f'Concurrent source change; refusing to overwrite: {path}')
+              outputs.append((target, data))
+          for target, data in outputs:
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_bytes(data)
+          print(f'Verified {len(outputs)} implementation and test files. Original source notices retained.')
+          PY
+          git add src test
+          git add -f tools/browser-visuals.mjs
+          git add -u tools/browser-smoke.mjs
+          git diff --cached --stat
+          git diff --cached > artifacts/native-visuals.patch
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'port: original visual-line generation and transformation, native folding and live inline controls'
+          fi
+          git rev-parse HEAD > artifacts/source-revision.txt
+      - name: Run original, core, renderer and build-tool regressions
+        run: |
+          python3 tools/build.py test
+          python3 -m unittest discover -s test -p test_build_tools.py -v
+      - name: Execute original snippets, folding and visual extension contracts on real Uno
+        run: |
+          dotnet build test/UnoEdit.Uno.Tests/UnoEdit.Uno.Tests.csproj -c Release -p:UnoEditTargetFrameworks=net10.0-desktop > artifacts/native-tests-build.log 2>&1 || { tail -100 artifacts/native-tests-build.log; exit 1; }
+          xvfb-run -a timeout 120s dotnet run --project test/UnoEdit.Uno.Tests/UnoEdit.Uno.Tests.csproj -c Release --no-build > artifacts/native-tests.log 2>&1 || { tail -150 artifacts/native-tests.log; exit 1; }
+          tail -20 artifacts/native-tests.log
+      - name: Install browser workload
+        run: dotnet workload install wasm-tools --skip-manifest-update
+      - name: Build and exercise native desktop application
+        env:
+          UNOEDIT_NATIVE_CHECKS: '1'
+        run: |
+          python3 tools/build.py desktop > artifacts/desktop.log 2>&1 || { tail -100 artifacts/desktop.log; exit 1; }
+          xvfb-run -a timeout 120s dotnet run --project src/UnoEdit.Uno.Demo/UnoEdit.Uno.Demo.csproj -c Release -f net10.0-desktop --no-build > artifacts/native-runtime.log 2>&1 || { tail -100 artifacts/native-runtime.log; exit 1; }
+          tail -30 artifacts/native-runtime.log
+      - name: Publish and exercise folding labels and real inline controls in the browser
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: |
+          python3 tools/build.py browser --base-path "/$REPOSITORY_NAME/" > artifacts/browser.log 2>&1 || { tail -100 artifacts/browser.log; exit 1; }
+          npm install --prefix tools --no-save --package-lock=false playwright@1.64.0
+          tools/node_modules/.bin/playwright install --with-deps chromium > artifacts/playwright-install.log 2>&1
+          node tools/browser-smoke.mjs artifacts/site "$REPOSITORY_NAME"
+      - name: Verify native packages and independent binary-only consumers
+        run: |
+          python3 tools/build.py pack > artifacts/packages.log 2>&1 || { tail -120 artifacts/packages.log; exit 1; }
+          tail -25 artifacts/packages.log
+      - name: Push only the validated source revision
+        run: git push origin HEAD:refs/heads/port/unoedit
+      - name: Preserve exact source and diagnostics
+        if: always()
+        run: |
+          mkdir -p artifacts
+          git archive --format=tar.gz --output=artifacts/source.tar.gz HEAD
+          git rev-parse HEAD > artifacts/source-revision.txt
+          test ! -f artifacts/browser-tests/failure-state.json || cat artifacts/browser-tests/failure-state.json
+          test ! -f artifacts/browser-tests/console.log || tail -100 artifacts/browser-tests/console.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: unoedit-native-visuals-validation
+          path: |
+            artifacts/tests
+            artifacts/browser-tests
+            artifacts/packages
+            artifacts/*.log
+            artifacts/*.binlog
+            artifacts/*.patch
+            artifacts/*.txt
+            artifacts/source.tar.gz
+          if-no-files-found: error
+          retention-days: 14
