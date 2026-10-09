@@ -2,13 +2,11 @@ name: UnoEdit GitHub Pages
 
 on:
   push:
-    branches: [master, port/unoedit]
+    branches: [port/unoedit]
     paths:
       - '.github/workflows/uno-pages.yml'
-      - 'src/UnoEdit.Core/**'
-      - 'src/UnoEdit.Rendering.Skia/**'
-      - 'src/UnoEdit.Uno/**'
-      - 'src/UnoEdit.Uno.Demo/**'
+      - 'src/**'
+      - 'test/**'
       - 'tools/build.py'
       - 'tools/browser-smoke.mjs'
       - 'global.json'
@@ -25,12 +23,26 @@ concurrency:
 
 jobs:
   build:
+    if: github.repository == 'wieslawsoltes/AvaloniaEdit' && github.ref == 'refs/heads/port/unoedit'
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    permissions:
+      contents: read
+      pages: read
+      checks: read
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Report Pages configuration and prior deployment diagnostics
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY" --jq '{default_branch,has_pages}'
+          gh api "repos/$GITHUB_REPOSITORY/pages" --jq '{html_url,build_type,status,source}'
+          # Read-only diagnostics; repository/environment policies are never modified.
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs" --jq '.check_runs[] | select(.name == "deploy") | .output' || true
+          gh api "repos/$GITHUB_REPOSITORY/check-runs/113797704430/annotations" --jq '.[] | .message' || true
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
@@ -70,7 +82,7 @@ jobs:
 
   deploy:
     needs: build
-    if: github.repository_owner == 'wieslawsoltes' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/port/unoedit')
+    if: github.repository == 'wieslawsoltes/AvaloniaEdit' && github.ref == 'refs/heads/port/unoedit'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -80,9 +92,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # The repository must have Settings > Pages > Source = GitHub Actions.
-      # GITHUB_TOKEN cannot grant itself the administration permission required
-      # to enable a previously disabled site; do not silently bypass that check.
       - uses: actions/configure-pages@v5
       - name: Deploy the verified browser sample
         id: deployment
