@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices.JavaScript;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
 using Scribe.Core;
@@ -16,8 +15,11 @@ public static partial class TestBridge
     [JSExport]
     public static string CompletionBounds()
     {
-        var list=View.Editor.GetLogicalDescendants().OfType<ListBox>().First(c=>c.Name=="PART_CompletionList");
-        var p=list.TranslatePoint(new global::Avalonia.Point(0,0),View)??throw new InvalidOperationException("Completion not in browser overlay.");
+        var list=View.Editor.GetLogicalDescendants().OfType<ListBox>().First(c=>c.Name=="PART_CompletionList"&&c.IsAttachedToVisualTree());
+        // Avalonia 12 popups can have a separate presentation root. TranslatePoint requires a
+        // common visual ancestor; screen/client conversion is the correct cross-root mapping.
+        var screen=list.PointToScreen(new global::Avalonia.Point(0,0));
+        var p=View.PointToClient(screen);
         return FormattableString.Invariant($"{{\"x\":{p.X},\"y\":{p.Y},\"width\":{list.Bounds.Width},\"height\":{list.Bounds.Height}}}");
     }
     [JSExport]
@@ -33,7 +35,6 @@ public static partial class TestBridge
                 await (_pendingCompletion??Task.CompletedTask);editor.CompletionProvider=_originalCompletion;break;
             case "start-diagnostics":
                 _originalDiagnostics=editor.DiagnosticProvider;_deferredDiagnostics=new();editor.DiagnosticProvider=_deferredDiagnostics;_pendingDiagnostics=editor.RefreshAnalysisAsync();
-                // Leave only the deliberately delayed request active; subsequent debounce runs use no provider.
                 editor.DiagnosticProvider=null;break;
             case "finish-diagnostics":
                 _deferredDiagnostics!.Source.TrySetResult([new Diagnostic(0,1,"stale")]);
