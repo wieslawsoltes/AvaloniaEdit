@@ -29,10 +29,9 @@ jobs:
           dotnet restore Cache.csproj
           cd browser
           cat > Browser.csproj <<'EOF'
-          <Project Sdk="Microsoft.NET.Sdk.WebAssembly"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType><AllowUnsafeBlocks>true</AllowUnsafeBlocks><WasmBuildNative>false</WasmBuildNative><RunAOTCompilation>false</RunAOTCompilation></PropertyGroup><ItemGroup><PackageReference Include="Avalonia.Browser" Version="12.1.4"/><PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4"/><PackageReference Include="Avalonia.AvaloniaEdit" Version="12.0.0"/></ItemGroup></Project>
+          <Project Sdk="Microsoft.NET.Sdk.WebAssembly"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType><AllowUnsafeBlocks>true</AllowUnsafeBlocks><RunAOTCompilation>false</RunAOTCompilation></PropertyGroup><ItemGroup><PackageReference Include="Avalonia.Browser" Version="12.1.4"/><PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4"/><PackageReference Include="Avalonia.AvaloniaEdit" Version="12.0.0"/></ItemGroup></Project>
           EOF
-          echo 'System.Console.WriteLine("ProText validation toolchain");' > Program.cs
-          dotnet publish Browser.csproj -c Release
+          dotnet restore Browser.csproj
       - name: Archive SDK, workload packs and package cache (no credentials)
         shell: bash
         run: |
