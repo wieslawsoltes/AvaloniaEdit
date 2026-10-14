@@ -1,0 +1,67 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:s="using:Scribe.Avalonia" x:Class="Scribe.Sample.MainView" Background="{DynamicResource ScribeBackground}">
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <Border Padding="22,16" Background="{DynamicResource ScribePanel}">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Orientation="Horizontal" Spacing="14">
+          <Border Background="#665BAF" CornerRadius="9" Width="42" Height="42"><TextBlock Text="S/" Foreground="White" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+          <StackPanel Spacing="3"><TextBlock Text="Scribe" FontSize="23" FontWeight="SemiBold"/><TextBlock Text="INDEPENDENT TEXT EDITING" FontSize="10" LetterSpacing="1.7" Classes="muted"/></StackPanel>
+        </StackPanel>
+        <Border Name="IdentityBadge" Grid.Column="1" BorderBrush="{DynamicResource ScribeBorder}" BorderThickness="1" CornerRadius="6" Padding="12,8" VerticalAlignment="Center"><TextBlock Text="ORIGINAL ENGINE  /  AVALONIA PRIMITIVES" FontSize="10" Classes="muted"/></Border>
+      </Grid>
+    </Border>
+    <Border Grid.Row="1" Padding="16,8" BorderBrush="{DynamicResource ScribeBorder}" BorderThickness="0,1,0,1" Background="{DynamicResource ScribePanel}">
+      <WrapPanel>
+        <Button Name="NewButton" Content="New" Margin="0,0,5,4"/>
+        <Button Name="OpenButton" Content="Open…" Margin="0,0,5,4"/>
+        <Button Name="SaveButton" Content="Save as…" Margin="0,0,14,4"/>
+        <Button Name="UndoButton" Content="Undo" Margin="0,0,5,4"/>
+        <Button Name="RedoButton" Content="Redo" Margin="0,0,14,4"/>
+        <Button Name="FindButton" Content="Find / replace" Margin="0,0,5,4"/>
+        <Button Name="SplitButton" Content="Split" Margin="0,0,5,4"/>
+        <Button Name="ThemeButton" Content="Light / dark" Margin="0,0,5,4"/>
+        <Button Name="TemplateButton" Content="Replace template" Margin="0,0,5,4"/>
+      </WrapPanel>
+    </Border>
+    <Grid Grid.Row="2" Name="Workspace" ColumnDefinitions="216,*">
+      <Border Name="Sidebar" Background="{DynamicResource ScribePanel}" BorderBrush="{DynamicResource ScribeBorder}" BorderThickness="0,0,1,0" Padding="12,17">
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+          <TextBlock Text="DOCUMENTS" Classes="muted" FontSize="10" LetterSpacing="1.5" Margin="10,0,0,12"/>
+          <StackPanel Grid.Row="1">
+            <Button Name="CodeButton" Classes="nav" Content="C#   Welcome.cs"/>
+            <Button Name="NotesButton" Classes="nav" Content="¶    Unicode notes.txt"/>
+            <Button Name="JsonButton" Classes="nav" Content="JSON   settings.json"/>
+            <Button Name="LargeButton" Classes="nav" Content="100,000-line document"/>
+          </StackPanel>
+          <StackPanel Grid.Row="2" Margin="8,25,8,0" Spacing="3">
+            <TextBlock Text="EDITING" Classes="muted" FontSize="10" LetterSpacing="1.5" Margin="0,0,0,8"/>
+            <CheckBox Name="WrapCheck" Content="Word wrap" FontSize="12"/>
+            <CheckBox Name="WhitespaceCheck" Content="Whitespace marks" FontSize="12"/>
+            <CheckBox Name="ReadOnlyCheck" Content="Read-only view" FontSize="12"/>
+            <Button Name="FoldButton" Content="Fold / unfold" Margin="0,8,0,0"/>
+            <Button Name="CompletionButton" Content="Completion" Margin="0,4,0,0"/>
+            <Button Name="SnippetButton" Content="Linked snippet" Margin="0,4,0,0"/>
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,12,0,0"><TextBox Name="LineBox" Width="95" Text="1" PlaceholderText="line:column"/><Button Name="GoToButton" Content="Go"/></StackPanel>
+          </StackPanel>
+          <StackPanel Grid.Row="4" Margin="8,16,8,0" Spacing="10">
+            <TextBlock Text="NO EDITOR DEPENDENCY" Classes="muted" FontSize="9" LetterSpacing="1"/>
+            <TextBlock Text="Own buffer. Own selections. Own undo. Own viewport." TextWrapping="Wrap" Classes="muted" FontSize="12"/>
+            <TextBlock Text="Alt+click   Add caret&#10;Alt+Shift+drag   Box select&#10;Ctrl/Cmd+D   Next occurrence&#10;Ctrl/Cmd+Space   Complete&#10;Tab   Next snippet placeholder" TextWrapping="Wrap" Classes="muted" FontSize="10" LineHeight="19"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+      <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" Margin="16,14,16,10">
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+          <StackPanel Spacing="4"><TextBlock Name="DocumentTitle" Text="Welcome.cs" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="Shaped text · shared documents · replaceable ControlTheme" FontSize="11" Classes="muted" TextTrimming="CharacterEllipsis"/></StackPanel>
+          <TextBlock Name="Mode" Grid.Column="1" Text="CODE EDITOR" FontSize="10" Classes="muted" VerticalAlignment="Center"/>
+        </Grid>
+        <Grid Grid.Row="1" Name="Editors" ColumnDefinitions="*,0,0">
+          <s:ScribeEditor Name="Primary" Language="C#"/>
+          <GridSplitter Name="SplitDivider" Grid.Column="1" HorizontalAlignment="Stretch" IsVisible="False"/>
+          <s:ScribeEditor Name="Secondary" Grid.Column="2" ShowOverview="False" IsVisible="False"/>
+        </Grid>
+        <Border Grid.Row="2" Background="{DynamicResource ScribePanel}" CornerRadius="5" Padding="12,9" Margin="0,10,0,0"><TextBlock Name="Information" Text="Try Ctrl/Cmd+D to select the next occurrence, or insert a linked snippet." Classes="muted" FontSize="11" TextWrapping="Wrap"/></Border>
+      </Grid>
+    </Grid>
+    <Border Grid.Row="3" Background="{DynamicResource ScribePanel}" BorderBrush="{DynamicResource ScribeBorder}" BorderThickness="0,1,0,0" Padding="20,7"><TextBlock Name="Runtime" Text="Scribe 0.2 preview · Standalone packages · MIT" Classes="muted" FontSize="10"/></Border>
+  </Grid>
+</UserControl>

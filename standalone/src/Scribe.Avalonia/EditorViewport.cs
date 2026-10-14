@@ -33,6 +33,7 @@ public sealed partial class EditorViewport : Control,IDisposable
     private long _revision=-1;
     private Document? _document;
     private double _extentWidth,_lastWidth;
+    private double _reportedHeight=double.NaN,_reportedWidth=double.NaN;
     private readonly DispatcherTimer _blinkTimer;
     private bool _blink=true,_disposed;
     internal readonly EditorInputClient InputClient;
@@ -47,7 +48,10 @@ public sealed partial class EditorViewport : Control,IDisposable
     public int RealizedLineCount {get;private set;}
     public int CachedLayoutCount=>_layouts.Count;
     public int FirstVisibleLine=>_rows.Find((int)(OffsetY/LineHeight));
+    public int VisualRowCount=>_rows.Total;
     public long ShapedLineCount {get;private set;}
+    public long RenderCount {get;private set;}
+    public string PreeditText=>_preedit??"";
     public Rect CaretRectangle=>GetCaretRectangle(Owner.Session?.Primary.Caret??0);
     static EditorViewport()
     {
@@ -178,8 +182,10 @@ public sealed partial class EditorViewport : Control,IDisposable
     public override void Render(DrawingContext context)
     {
         base.Render(context);if(!CheckDocument()||Bounds.Width<=0||Bounds.Height<=0)return;
+        RenderCount++;
         context.FillRectangle(Owner.Background??Brushes.Transparent,new Rect(Bounds.Size));
-        var snapshot=Owner.Session.Document.Snapshot;int index=_rows.Find((int)(OffsetY/LineHeight));int realized=0;
+        var snapshot=Owner.Session.Document.Snapshot;int primaryLine=snapshot.LineAt(Owner.Session.Primary.Caret);
+        int index=_rows.Find((int)(OffsetY/LineHeight));int realized=0;
         while(index<snapshot.LineCount&&realized<1024)
         {
             var line=snapshot.GetLine(index);var shaped=Shape(index);double y=_rows.Prefix(index)*LineHeight-OffsetY;
@@ -187,7 +193,7 @@ public sealed partial class EditorViewport : Control,IDisposable
             if(_rows[index]>0)
             {
                 realized++;double height=Math.Max(LineHeight,shaped.Layout.Height);
-                if(snapshot.LineAt(Owner.Session.Primary.Caret)==index)context.FillRectangle(Owner.CurrentLineBrush,new Rect(GutterWidth,y,TextWidth,height));
+                if(primaryLine==index)context.FillRectangle(Owner.CurrentLineBrush??Brushes.Transparent,new Rect(GutterWidth,y,TextWidth,height));
                 if(Owner.ShowLineNumbers)shaped.Number.Draw(context,new Point(Math.Max(0,GutterWidth-shaped.Number.Width-18),y));
                 if(Owner.Folds.Any(f=>f.FirstLine==index))
                 {
@@ -224,7 +230,7 @@ public sealed partial class EditorViewport : Control,IDisposable
                         {var r=shaped.Layout.HitTestTextPosition(shaped.ToVisual(p));context.DrawEllipse(Owner.GutterBrush,null,new Point(GutterWidth+r.X-OffsetX+2,y+r.Y+LineHeight*.65),.7,.7);drawn++;}
                     }
                     if(IsFocused&&_blink)foreach(var selection in Owner.Session.Selections)if(snapshot.LineAt(selection.Caret)==index)
-                    {var caret=GetCaretRectangle(selection.Caret);context.FillRectangle(Owner.CaretBrush,caret);}
+                    {var caret=GetCaretRectangle(selection.Caret);context.FillRectangle(Owner.CaretBrush??Brushes.Transparent,caret);}
                 }
             }
             int next=_rows.Prefix(index+1);if(next>=_rows.Total)break;int nextIndex=_rows.Find(next);if(nextIndex<=index)break;index=nextIndex;
@@ -233,14 +239,19 @@ public sealed partial class EditorViewport : Control,IDisposable
         if(IsFocused&&!string.IsNullOrEmpty(_preedit))
         {
             var caret=CaretRectangle;using var preedit=new TextLayout(_preedit,new Typeface(Owner.FontFamily),Owner.FontSize*Owner.Zoom,Owner.Foreground,lineHeight:LineHeight);
-            var rect=new Rect(caret.X,caret.Y,Math.Max(8,preedit.Width),LineHeight);context.FillRectangle(Owner.Background,rect);preedit.Draw(context,rect.Position);
+            var rect=new Rect(caret.X,caret.Y,Math.Max(8,preedit.Width),LineHeight);context.FillRectangle(Owner.Background??Brushes.Transparent,rect);preedit.Draw(context,rect.Position);
             context.DrawLine(new Pen(Owner.CaretBrush,1),rect.BottomLeft,rect.BottomRight);
         }
-        Dispatcher.UIThread.Post(Owner.UpdateView,DispatcherPriority.Background);
+        // Report only changed extents. Posting an invalidation on every Render creates an idle render loop.
+        if(_reportedHeight!=ExtentHeight||_reportedWidth!=ExtentWidth)
+        {
+            _reportedHeight=ExtentHeight;_reportedWidth=ExtentWidth;
+            Dispatcher.UIThread.Post(Owner.UpdateView,DispatcherPriority.Background);
+        }
     }
     private void PaintRange(DrawingContext context,ShapedLine line,int start,int selectionStart,int selectionEnd,double y,IBrush? brush)
     {
-        if(selectionEnd<=start||selectionStart>start+line.Raw.Length)return;
+        if(brush is null||selectionEnd<=start||selectionStart>start+line.Raw.Length)return;
         int first=Math.Clamp(selectionStart-start,0,line.Raw.Length),last=Math.Clamp(selectionEnd-start,first,line.Raw.Length);
         foreach(var r in line.Layout.HitTestTextRange(line.ToVisual(first),line.ToVisual(last)-line.ToVisual(first)))
             context.FillRectangle(brush,new Rect(GutterWidth+r.X-OffsetX,y+r.Y,Math.Max(2,r.Width),Math.Max(LineHeight,r.Height)));

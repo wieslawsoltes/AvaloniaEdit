@@ -3,6 +3,8 @@ on:
   push:
     branches: [feat/standalone-text-control]
     paths: ['standalone/**', '.github/workflows/scribe-standalone.yml']
+  pull_request:
+    paths: ['standalone/**', '.github/workflows/scribe-standalone.yml']
 permissions:
   contents: read
 concurrency:
@@ -27,11 +29,58 @@ jobs:
         run: |
           mkdir -p artifacts/validation
           dotnet run --project tests/Scribe.Core.Tests -c Release 2>&1 | tee artifacts/validation/core.log
-      - name: Compile independent Avalonia controls
+      - name: Compile desktop and independent controls
         if: success() || failure()
-        run: dotnet build src/Scribe.Avalonia -c Release 2>&1 | tee artifacts/validation/controls.log
+        run: dotnet build samples/Scribe.Desktop -c Release 2>&1 | tee artifacts/validation/desktop.log
+      - name: Native headless control tests
+        if: success() || failure()
+        run: dotnet run --project tests/Scribe.UI.Tests -c Release 2>&1 | tee artifacts/validation/ui.log
+      - name: Publish real Avalonia WebAssembly sample
+        if: success() || failure()
+        run: |
+          dotnet workload install wasm-tools --skip-manifest-update
+          dotnet publish samples/Scribe.Browser -c Release -o artifacts/browser 2>&1 | tee artifacts/validation/browser-build.log
+      - name: Validate native browser input
+        if: success() || failure()
+        run: |
+          python -m pip install playwright==1.64.0 pillow==12.0.0
+          python -m playwright install --with-deps chromium
+          python tools/browser_validate.py artifacts/browser 2>&1 | tee artifacts/validation/browser.log
+      - name: Pack independent libraries
+        if: success() || failure()
+        run: |
+          dotnet pack src/Scribe.Core -c Release -o artifacts/packages
+          dotnet pack src/Scribe.Avalonia -c Release -o artifacts/packages
+      - name: Stage clean standalone source and identity
+        if: always()
+        run: |
+          mkdir -p artifacts/source artifacts/validation
+          git -C .. archive HEAD standalone | tar -x -C artifacts/source --strip-components=1
+          git -C .. rev-parse HEAD > artifacts/validation/commit.txt
+          dotnet --info > artifacts/validation/dotnet-info.txt
+          printf '%s\n' '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}' > artifacts/validation/ci-run.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scribe-source
+          path: standalone/artifacts/source
+          include-hidden-files: true
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scribe-browser
+          path: standalone/artifacts/browser
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scribe-packages
+          path: standalone/artifacts/packages
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: scribe-validation
           path: standalone/artifacts/validation
+          retention-days: 14
