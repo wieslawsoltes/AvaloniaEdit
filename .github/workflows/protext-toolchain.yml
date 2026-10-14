@@ -1,0 +1,49 @@
+name: ProText toolchain
+on:
+  push:
+    branches: [feat/protext-controls]
+    paths: [.github/workflows/protext-toolchain.yml]
+permissions:
+  contents: read
+jobs:
+  toolchain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DOTNET_INSTALL_DIR: ${{ runner.temp }}/protext-dotnet
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore isolated editor and WebAssembly dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet workload install wasm-tools --skip-manifest-update
+          mkdir -p "$RUNNER_TEMP/protext-restore/browser"
+          cd "$RUNNER_TEMP/protext-restore"
+          cat > Cache.csproj <<'EOF'
+          <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFrameworks>net8.0;net10.0</TargetFrameworks></PropertyGroup><ItemGroup><PackageReference Include="Avalonia" Version="12.1.4"/><PackageReference Include="Avalonia.Desktop" Version="12.1.4"/><PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4"/><PackageReference Include="Avalonia.Headless" Version="12.1.4"/><PackageReference Include="Avalonia.AvaloniaEdit" Version="12.0.0"/></ItemGroup><ItemGroup><Compile Remove="browser/**"/></ItemGroup></Project>
+          EOF
+          dotnet restore Cache.csproj
+          cd browser
+          cat > Browser.csproj <<'EOF'
+          <Project Sdk="Microsoft.NET.Sdk.WebAssembly"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType><AllowUnsafeBlocks>true</AllowUnsafeBlocks><WasmBuildNative>false</WasmBuildNative><RunAOTCompilation>false</RunAOTCompilation></PropertyGroup><ItemGroup><PackageReference Include="Avalonia.Browser" Version="12.1.4"/><PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4"/><PackageReference Include="Avalonia.AvaloniaEdit" Version="12.0.0"/></ItemGroup></Project>
+          EOF
+          echo 'System.Console.WriteLine("ProText validation toolchain");' > Program.cs
+          dotnet publish Browser.csproj -c Release
+      - name: Archive SDK, workload packs and package cache (no credentials)
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -I 'zstd -T0 -3' -cf "$RUNNER_TEMP/protext-sdk.tar.zst" -C "$DOTNET_INSTALL_DIR" .
+          tar -I 'zstd -T0 -3' -cf "$RUNNER_TEMP/protext-packages.tar.zst" -C "$HOME/.nuget" packages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: protext-validation-toolchain
+          path: |
+            ${{ runner.temp }}/protext-sdk.tar.zst
+            ${{ runner.temp }}/protext-packages.tar.zst
+          compression-level: 0
+          retention-days: 3
