@@ -48,15 +48,16 @@ jobs:
         if: success() || failure()
         run: |
           set -euo pipefail
-          python -m pip install playwright pillow
+          python -m pip install playwright==1.64.0 pillow==12.0.0
           python -m playwright install --with-deps chromium
           python tools/browser_validate.py artifacts/browser 2>&1 | tee artifacts/validation/browser-tests.log
-      - name: Pack reusable libraries
+      - name: Pack reusable libraries and validate isolated consumer
         if: success() || failure()
         run: |
           set -euo pipefail
           dotnet pack src/ProText.Core/ProText.Core.csproj -c Release -o artifacts/packages
           dotnet pack src/ProText.Avalonia/ProText.Avalonia.csproj -c Release -o artifacts/packages
+          python tools/verify_packages.py
       - name: Stage clean source and build identity
         if: always()
         run: |
@@ -66,6 +67,17 @@ jobs:
           git -C .. rev-parse HEAD > artifacts/validation/source-commit.txt
           dotnet --info > artifacts/validation/dotnet-info.txt
           printf '%s\n' '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}' > artifacts/validation/ci-run.txt
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+          root=Path('artifacts')
+          records=[]
+          for group in ('source','browser','packages'):
+              for path in sorted((root/group).rglob('*')):
+                  if path.is_file():
+                      records.append({'path':str(path.relative_to(root)),'bytes':path.stat().st_size,'sha256':hashlib.sha256(path.read_bytes()).hexdigest()})
+          (root/'validation/file-manifest.json').write_text(json.dumps({'commit':os.environ['GITHUB_SHA'],'files':records},indent=2))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:

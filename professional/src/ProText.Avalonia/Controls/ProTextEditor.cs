@@ -99,7 +99,7 @@ public partial class ProTextEditor : TemplatedControl, IDisposable
     private bool _attached,_disposed;
     public ProTextEditor()
     {
-        Editor=new TextEditor { ShowLineNumbers=true, Background=Brushes.Transparent };
+        Editor=new ProTextSurface { ShowLineNumbers=true, Background=Brushes.Transparent };
         Search=new EditorSearchController(this);
         Editor.TextArea.TextView.BackgroundRenderers.Add(new EditorAdornmentRenderer(this));
         Editor.TextArea.Caret.PositionChanged+=OnCaretChanged;

@@ -1,4 +1,4 @@
-<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:c="using:ProText.Avalonia.Controls" x:CompileBindings="False">
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:c="using:ProText.Avalonia.Controls" xmlns:m="using:ProText.Avalonia" x:CompileBindings="True">
   <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml"/>
   <Styles.Resources>
     <ResourceDictionary>
@@ -28,7 +28,7 @@
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="FontFamily" Value="Cascadia Code,Consolas,Menlo,monospace"/>
         <Setter Property="Template">
-          <ControlTemplate>
+          <ControlTemplate x:DataType="c:ProTextEditor">
             <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
               <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
                 <ContentPresenter Content="{TemplateBinding Header}"/>
@@ -53,7 +53,7 @@
       </ControlTheme>
       <ControlTheme x:Key="ProTextMinimalTheme" TargetType="c:ProTextEditor" BasedOn="{StaticResource {x:Type c:ProTextEditor}}">
         <Setter Property="Template">
-          <ControlTemplate>
+          <ControlTemplate x:DataType="c:ProTextEditor">
             <Border Background="{TemplateBinding Background}" BorderBrush="{DynamicResource ProTextAccent}" BorderThickness="2" CornerRadius="8">
               <Grid RowDefinitions="Auto,*,Auto">
                 <c:EditorSearchBar Name="PART_SearchBar" IsVisible="{TemplateBinding IsSearchOpen}"/>
@@ -67,9 +67,9 @@
       <ControlTheme x:Key="{x:Type c:EditorSearchBar}" TargetType="c:EditorSearchBar">
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="Template">
-          <ControlTemplate>
+          <ControlTemplate x:DataType="c:EditorSearchBar">
             <Border Background="{DynamicResource ProTextPanel}" Padding="10,8" BorderBrush="{DynamicResource ProTextBorder}" BorderThickness="0,0,0,1" DataContext="{TemplateBinding Controller}">
-              <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto,Auto,Auto">
+              <Grid x:DataType="m:EditorSearchController" RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto,Auto,Auto">
                 <TextBox Name="PART_Query" Text="{Binding Pattern, Mode=TwoWay}" PlaceholderText="Find in document" MinWidth="100" AutomationProperties.Name="Find text"/>
                 <Button Grid.Column="1" Content="↑" Margin="6,0,0,0" Command="{Binding PreviousCommand}" AutomationProperties.Name="Previous match"/>
                 <Button Grid.Column="2" Content="↓" Margin="4,0,0,0" Command="{Binding NextCommand}" AutomationProperties.Name="Next match"/>
@@ -91,7 +91,7 @@
       </ControlTheme>
       <ControlTheme x:Key="{x:Type c:EditorStatusBar}" TargetType="c:EditorStatusBar">
         <Setter Property="Template">
-          <ControlTemplate>
+          <ControlTemplate x:DataType="c:EditorStatusBar">
             <Border Background="{DynamicResource ProTextPanel}" BorderBrush="{DynamicResource ProTextBorder}" BorderThickness="0,1,0,0" Padding="12,6">
               <Grid ColumnDefinitions="Auto,*">
                 <TextBlock Text="{TemplateBinding PositionText}" FontSize="11" Foreground="{DynamicResource ProTextMuted}"/>
@@ -103,7 +103,7 @@
       </ControlTheme>
       <ControlTheme x:Key="{x:Type c:TextDiffEditor}" TargetType="c:TextDiffEditor">
         <Setter Property="Template">
-          <ControlTemplate>
+          <ControlTemplate x:DataType="c:TextDiffEditor">
             <Grid RowDefinitions="Auto,Auto,*" Background="{DynamicResource ProTextBackground}">
               <DockPanel Margin="12,8">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">

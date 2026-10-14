@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the published Avalonia WASM sample, including real canvas keyboard input.
+"""Exercise the published Avalonia WASM sample with native canvas input and a state-observation bridge.
 Requires: pip install playwright pillow; python -m playwright install chromium.
 """
 from __future__ import annotations
@@ -81,12 +81,14 @@ with sync_playwright() as playwright:
             print('PASS', name, flush=True)
         except Exception:
             error = traceback.format_exc()
-            results.append({'name': name, 'passed': False, 'error': error})
-            print('FAIL', name, error, flush=True)
+            result = {'name': name, 'passed': False, 'error': error}
             try:
-                page.screenshot(path=str(OUTPUT / f'failure-{len(results):02}.png'))
+                result['state'] = state()
+                page.screenshot(path=str(OUTPUT / f'failure-{len(results)+1:02}.png'))
             except Exception:
                 pass
+            results.append(result)
+            print('FAIL', name, error, flush=True)
 
     try:
         start = time.perf_counter()
@@ -138,9 +140,19 @@ with sync_playwright() as playwright:
         test('native newline and caret status', multiline)
         def unicode():
             reset('')
-            page.keyboard.insert_text('Zażółć 🌍 日本語')
-            expect_text('Zażółć 🌍 日本語')
-        test('Unicode text input', unicode)
+            text = 'Zażółć 🌍 日本語'
+            # CDP's insertText alone skips the composition lifecycle used by Avalonia.Browser.
+            # Drive Chromium's actual IME composition and commit, not a managed document setter.
+            cdp = context.new_cdp_session(page)
+            try:
+                utf16_length = len(text.encode('utf-16-le')) // 2
+                cdp.send('Input.imeSetComposition', {'text': text, 'selectionStart': utf16_length, 'selectionEnd': utf16_length})
+                cdp.send('Input.insertText', {'text': text})
+            finally:
+                cdp.detach()
+            page.wait_for_timeout(100)
+            expect_text(text)
+        test('Chromium IME composition commit with Unicode', unicode)
         def unicode_caret():
             reset('a🌍b')
             execute('caret', '3')
@@ -308,7 +320,7 @@ with sync_playwright() as playwright:
             wait('window.protext.state().Completions >= 2')
             page.screenshot(path=str(OUTPUT / 'completion.png'))
             page.keyboard.press('Tab')
-            expect(state()['Text'].startswith('Console'), 'Completion insertion did not replace prefix')
+            expect(state()['Text'].startswith('Console'), 'Completion insertion did not replace prefix: '+state()['Text'])
         test('keyboard completion popup and insertion', completion)
         def split():
             reset('shared')

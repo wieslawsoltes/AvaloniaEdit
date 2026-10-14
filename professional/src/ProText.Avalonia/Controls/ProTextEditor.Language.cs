@@ -46,7 +46,8 @@ public partial class ProTextEditor
             var window=new CompletionWindow(Editor.TextArea) { StartOffset=request.WordRange.Offset,EndOffset=request.Offset };
             foreach(var item in items.Take(200)) window.CompletionList.CompletionData.Add(new CompletionData(item));
             _completion=window; window.Closed+=(_,_)=>{ if(_completion==window) _completion=null; };
-            window.Show();
+            window.Show(); window.CompletionList.SelectItem(request.Prefix);
+            if(window.CompletionList.SelectedItem is null) window.CompletionList.SelectedItem=window.CompletionList.CompletionData[0];
         }
         catch(OperationCanceledException) { }
         catch(Exception ex) { ReportServiceError(ex); }
