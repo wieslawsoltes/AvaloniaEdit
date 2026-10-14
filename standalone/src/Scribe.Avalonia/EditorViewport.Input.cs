@@ -25,7 +25,13 @@ public sealed partial class EditorViewport
         Owner.HandleKey(e);
     }
     protected override void OnGotFocus(FocusChangedEventArgs e){base.OnGotFocus(e);RefreshInputState();}
-    protected override void OnLostFocus(FocusChangedEventArgs e){base.OnLostFocus(e);_preedit=null;Owner.CloseCompletion();InvalidateVisual();}
+    protected override void OnLostFocus(FocusChangedEventArgs e)
+    {
+        base.OnLostFocus(e);_preedit=null;
+        // Completion items are part of the current editing interaction, not unrelated focus targets.
+        if(!Owner.HasCompletionFocus(e.NewFocusedElement))Owner.CloseCompletion();
+        InvalidateVisual();
+    }
     public void MoveVertical(int rows,bool extend=false)
     {
         if(!CheckDocument())return;
@@ -49,7 +55,6 @@ public sealed partial class EditorViewport
         {
             var info=Owner.Session.Document.Snapshot.GetLine(line);Owner.Session.Select(new Selection(info.Start,info.Start+info.TotalLength));
         }
-        else if(e.ClickCount==2)Owner.Session.SelectWord(offset);
         else
         {
             bool alt=e.KeyModifiers.HasFlag(KeyModifiers.Alt),shift=e.KeyModifiers.HasFlag(KeyModifiers.Shift);

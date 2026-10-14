@@ -46,6 +46,9 @@ jobs:
           python -m pip install playwright==1.64.0 pillow==12.0.0
           python -m playwright install --with-deps chromium
           python tools/browser_validate.py artifacts/browser 2>&1 | tee artifacts/validation/browser.log
+      - name: Validate completion focus and asynchronous result guards
+        if: success() || failure()
+        run: python tools/browser_deep_validate.py artifacts/browser 2>&1 | tee artifacts/validation/browser-deep.log
       - name: Audit independent dependencies and package consumer
         if: success() || failure()
         run: |

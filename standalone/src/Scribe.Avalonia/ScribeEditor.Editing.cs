@@ -47,16 +47,21 @@ public partial class ScribeEditor
         {
             if(cut&&!CanEdit) return; var clipboard=TopLevel.GetTopLevel(this)?.Clipboard;
             if(clipboard is null) {Message="Clipboard is not available in this host."; return;}
-            var session=Session; long revision=session.Document.Revision; var selection=session.Selections.ToArray(); string text=session.SelectedText();
-            if(selection.All(s=>s.Length==0))
+            var session=Session; long revision=session.Document.Revision;
+            var originalSelection=session.Selections.ToArray();var cutSelection=originalSelection;string text=session.SelectedText();
+            if(originalSelection.All(s=>s.Length==0))
             {
                 var line=session.Document.Snapshot.GetLine(session.Document.Snapshot.LineAt(session.Primary.Caret));
                 text=session.Document.Snapshot.GetText(line.Start,line.TotalLength);
-                if(cut) selection=[new(line.Start,line.Start+line.TotalLength)];
+                if(cut) cutSelection=[new(line.Start,line.Start+line.TotalLength)];
             }
             await clipboard.SetValueAsync(DataFormat.Text,text);
-            if(cut&&session==Session&&revision==session.Document.Revision&&CanEdit)
-            {session.Select(selection); session.Insert(""); RevealCaret();}
+            if(cut)
+            {
+                if(session!=Session||revision!=session.Document.Revision||!originalSelection.SequenceEqual(session.Selections)||!CanEdit)
+                {Message="Text copied, but cut cancelled because the document or selection changed.";return;}
+                session.Select(cutSelection);session.Insert("");RevealCaret();
+            }
         }
         catch(Exception e) {Message="Clipboard operation failed: "+e.Message;}
     }

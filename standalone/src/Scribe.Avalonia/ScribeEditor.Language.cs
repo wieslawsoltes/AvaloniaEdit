@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Scribe.Core;
 namespace Scribe.Avalonia;
@@ -24,11 +25,32 @@ public partial class ScribeEditor
     private void AttachCompletionTemplate(TemplateAppliedEventArgs e)
     {
         CloseCompletion();
-        if(_completionList is not null) _completionList.DoubleTapped-=CompleteDoubleTapped;
+        if(_completionList is not null)
+        {
+            _completionList.DoubleTapped-=CompleteDoubleTapped;
+            _completionList.RemoveHandler(InputElement.KeyDownEvent,CompletionKeyDown);
+            _completionList.LostFocus-=CompletionLostFocus;
+        }
         _completionPopup=e.NameScope.Find<Popup>("PART_CompletionPopup");
         _completionList=e.NameScope.Find<ListBox>("PART_CompletionList");
         if(_completionPopup is not null) _completionPopup.PlacementTarget=Viewport;
-        if(_completionList is not null) _completionList.DoubleTapped+=CompleteDoubleTapped;
+        if(_completionList is not null)
+        {
+            _completionList.DoubleTapped+=CompleteDoubleTapped;
+            _completionList.AddHandler(InputElement.KeyDownEvent,CompletionKeyDown,RoutingStrategies.Tunnel);
+            _completionList.LostFocus+=CompletionLostFocus;
+        }
+    }
+    internal bool HasCompletionFocus(IInputElement? input)=>input is Visual visual&&_completionList is not null&&
+        (ReferenceEquals(visual,_completionList)||_completionList.IsVisualAncestorOf(visual));
+    private void CompletionLostFocus(object? sender,FocusChangedEventArgs e)
+    {
+        if(!ReferenceEquals(e.NewFocusedElement,Viewport)&&!HasCompletionFocus(e.NewFocusedElement))CloseCompletion();
+    }
+    private void CompletionKeyDown(object? sender,KeyEventArgs e)
+    {
+        bool escape=e.Key==Key.Escape;
+        if(HandleCompletionKey(e)&&escape)FocusEditor();
     }
     private void CompleteDoubleTapped(object? sender,TappedEventArgs e)=>AcceptCompletion();
     public async Task RefreshAnalysisAsync()

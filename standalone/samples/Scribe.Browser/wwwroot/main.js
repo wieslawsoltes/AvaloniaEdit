@@ -6,7 +6,14 @@ try {
   await runtime.runMain(config.mainAssemblyName, [location.href]);
   if (new URLSearchParams(location.search).get('test') === '1') {
     const bridge = exports.Scribe.Browser.TestBridge;
-    globalThis.scribe = { ready: true, state: () => JSON.parse(bridge.State()), execute: (command, argument = '') => bridge.Execute(command, argument), bounds: name => JSON.parse(bridge.Bounds(name)), point: offset => JSON.parse(bridge.Point(offset)) };
+    globalThis.scribe = {
+      ready: true,
+      state: () => JSON.parse(bridge.State()),
+      execute: (command, argument = '') => bridge.Execute(command, argument),
+      bounds: name => JSON.parse(name === 'completion' ? bridge.CompletionBounds() : bridge.Bounds(name)),
+      point: offset => JSON.parse(bridge.Point(offset)),
+      probe: command => bridge.Probe(command)
+    };
   }
   document.getElementById('loading')?.remove();
 } catch (error) {
