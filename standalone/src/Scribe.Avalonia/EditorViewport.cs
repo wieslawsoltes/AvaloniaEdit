@@ -21,6 +21,7 @@ public sealed partial class EditorViewport : Control,IDisposable
         public int[] RawToDisplay=rawToDisplay,DisplayToRaw=displayToRaw;
         public TextLayout Layout=layout,Number=number;
         public int Cost=>Raw.Length+Display.Length;
+        public bool IsSimpleLeftToRight {get;}=raw.All(c=>c=='\t'||c is >=' ' and <='~');
         public int ToVisual(int offset)=>RawToDisplay[Math.Clamp(offset,0,Raw.Length)];
         public int ToRaw(int offset)=>DisplayToRaw[Math.Clamp(offset,0,DisplayToRaw.Length-1)];
         public void Dispose(){Layout.Dispose();Number.Dispose();}
@@ -204,12 +205,7 @@ public sealed partial class EditorViewport : Control,IDisposable
                 using(context.PushClip(new Rect(GutterWidth,0,TextWidth,Bounds.Height)))
                 {
                     foreach(var selection in Owner.Session.Selections) PaintRange(context,shaped,line.Start,selection.Start,selection.End,y,Owner.SelectionBrush);
-                    if(Owner.IsSearchOpen)
-                    {
-                        var hits=Owner.Search.Results.Matches;int low=0,high=hits.Count;
-                        while(low<high){int mid=(low+high)/2;if(hits[mid].End<line.Start)low=mid+1;else high=mid;}
-                        for(int h=low;h<hits.Count&&hits[h].Start<=line.End;h++)PaintRange(context,shaped,line.Start,hits[h].Start,hits[h].End,y,Brush.Parse("#5090B5DD"));
-                    }
+                    if(Owner.IsSearchOpen)PaintSearchMatches(context,shaped,line.Start,line.End,y);
                     shaped.Layout.Draw(context,new Point(GutterWidth-OffsetX,y));
                     if(shaped.Raw.Length<line.Length)
                     {
@@ -247,6 +243,34 @@ public sealed partial class EditorViewport : Control,IDisposable
         {
             _reportedHeight=ExtentHeight;_reportedWidth=ExtentWidth;
             Dispatcher.UIThread.Post(Owner.UpdateView,DispatcherPriority.Background);
+        }
+    }
+    private void PaintSearchMatches(DrawingContext context,ShapedLine shaped,int lineStart,int lineEnd,double y)
+    {
+        var hits=Owner.Search.Results.Matches;
+        if(hits.Count==0)return;
+        int visibleStart=lineStart,visibleEnd=Math.Min(lineEnd,lineStart+shaped.Raw.Length);
+        // A drawing clip does not bound shaping work. Cull offscreen ASCII ranges before
+        // requesting geometry. Complex/bidirectional text keeps the general shaped path.
+        if(shaped.IsSimpleLeftToRight)
+        {
+            double top=Math.Max(0,-y),bottom=Math.Min(shaped.Layout.Height,Bounds.Height-y);
+            int first=shaped.Layout.HitTestPoint(new Point(OffsetX,top)).TextPosition;
+            int last=shaped.Layout.HitTestPoint(new Point(OffsetX+TextWidth,Math.Max(top,bottom-.01))).TextPosition;
+            visibleStart=lineStart+Math.Max(0,shaped.ToRaw(Math.Min(first,last))-1);
+            visibleEnd=Math.Min(visibleEnd,lineStart+shaped.ToRaw(Math.Max(first,last))+1);
+        }
+        int low=0,high=hits.Count;
+        while(low<high){int mid=(low+high)/2;if(hits[mid].End<visibleStart)low=mid+1;else high=mid;}
+        var brush=Brush.Parse("#5090B5DD");
+        for(int h=low;h<hits.Count&&hits[h].Start<=visibleEnd;)
+        {
+            int start=hits[h].Start,end=hits[h].End;h++;
+            // Adjacent highlights have the same appearance as their union. One geometry
+            // query avoids quadratic work on thousands of contiguous single-character hits.
+            while(h<hits.Count&&hits[h].Start<=end&&hits[h].Start<=visibleEnd)
+            {end=Math.Max(end,hits[h].End);h++;}
+            PaintRange(context,shaped,lineStart,Math.Max(start,visibleStart),Math.Min(end,visibleEnd),y,brush);
         }
     }
     private void PaintRange(DrawingContext context,ShapedLine line,int start,int selectionStart,int selectionEnd,double y,IBrush? brush)
