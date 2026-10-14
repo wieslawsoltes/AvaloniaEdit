@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><IsPackable>false</IsPackable></PropertyGroup><ItemGroup><ProjectReference Include="../../src/Scribe.Avalonia/Scribe.Avalonia.csproj"/><PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4"/><PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.4"/></ItemGroup></Project>
