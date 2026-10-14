@@ -47,7 +47,7 @@ internal static class Program
         Test("search cap explicit",()=>{ var r=SearchEngine.Find("aaaa",new("a",MaxMatches:2)); Equal(2,r.Hits.Count); Check(r.IsTruncated); Throws<InvalidOperationException>(()=>SearchEngine.CreateReplacementEdits("aaaa",new("a",MaxMatches:2),"b")); });
         Test("empty search is empty",()=>Equal(0,SearchEngine.Find("abc",new("")).Hits.Count));
         Test("search cancellation",()=>{ using var cts=new CancellationTokenSource(); cts.Cancel(); Throws<OperationCanceledException>(()=>SearchEngine.Find("aaaa",new("a"),cancellationToken:cts.Token)); });
-        Test("fold nested braces",()=>{ var f=new BraceFoldingProvider().GetFoldings("{\n  [\n  ]\n}"); Equal(2,f.Count); Equal(0,f[0].StartOffset); Equal(13,f[0].EndOffset); });
+        Test("fold nested braces",()=>{ const string text="{\n  [\n  ]\n}"; var f=new BraceFoldingProvider().GetFoldings(text); Equal(2,f.Count); Equal(0,f[0].StartOffset); Equal(text.Length,f[0].EndOffset); });
         Test("fold ignores strings and comments",()=>{ var f=new BraceFoldingProvider().GetFoldings("{\n \"}\"; // }\n /* } */\n}"); Equal(1,f.Count); });
         Test("fold multiline comments",()=>Equal(1,new BraceFoldingProvider().GetFoldings("/* hello\nworld */").Count));
         Test("fold ignores single-line braces",()=>Equal(0,new BraceFoldingProvider().GetFoldings("{ [ ] }").Count));
@@ -120,7 +120,10 @@ internal static class Program
         });
         Test("zero-width search navigation",()=>
         {
-            using var editor=new ProTextEditor { Text="aaa" }; editor.Search.Pattern="(?=a)"; editor.Search.UseRegex=true; editor.Search.Refresh(); editor.Search.Navigate(); Equal(1,editor.Editor.SelectionStart); editor.Search.Navigate(); Equal(2,editor.Editor.SelectionStart); editor.Search.Navigate(); Equal(0,editor.Editor.SelectionStart);
+            using var editor=new ProTextEditor { Text="aaa" };
+            editor.Editor.Select(0,0); // Document insertion moves the caret; set the navigation starting point explicitly.
+            editor.Search.Pattern="(?=a)"; editor.Search.UseRegex=true; editor.Search.Refresh();
+            editor.Search.Navigate(); Equal(1,editor.Editor.CaretOffset); editor.Search.Navigate(); Equal(2,editor.Editor.CaretOffset); editor.Search.Navigate(); Equal(0,editor.Editor.CaretOffset);
         });
         Test("template replacement preserves editing surface",()=>
         {

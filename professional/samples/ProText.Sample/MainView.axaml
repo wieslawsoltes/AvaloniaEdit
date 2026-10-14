@@ -31,7 +31,7 @@
           <TextBlock Text="WORKSPACE" Classes="muted" FontSize="10" LetterSpacing="1.8" Margin="10,0,0,12"/>
           <StackPanel Grid.Row="1" Spacing="2">
             <Button Name="CodeButton" Classes="nav" Content="C#    Welcome.cs"/>
-            <Button Name="JsonButton" Classes="nav" Content="{ }    settings.json"/>
+            <Button Name="JsonButton" Classes="nav" Content="JSON    settings.json"/>
             <Button Name="TextButton" Classes="nav" Content="¶     Notes.txt"/>
             <Button Name="LargeButton" Classes="nav" Content="↧    100,000-line document"/>
             <Button Name="DiffButton" Classes="nav" Content="⇄    Compare revisions"/>
