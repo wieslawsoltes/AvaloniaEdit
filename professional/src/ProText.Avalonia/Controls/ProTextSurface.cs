@@ -1,5 +1,4 @@
 using Avalonia.Input;
-using Avalonia.Interactivity;
 using AvaloniaEdit;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
@@ -44,5 +43,5 @@ internal sealed class GroupedTextArea : TextArea
         base.OnKeyDown(e);
     }
     protected override void OnPointerPressed(PointerPressedEventArgs e) { _hasTypingGroup=false; base.OnPointerPressed(e); }
-    protected override void OnLostFocus(RoutedEventArgs e) { _hasTypingGroup=false; base.OnLostFocus(e); }
+    protected override void OnLostFocus(FocusChangedEventArgs e) { _hasTypingGroup=false; base.OnLostFocus(e); }
 }
