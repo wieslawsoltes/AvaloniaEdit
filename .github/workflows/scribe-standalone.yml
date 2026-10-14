@@ -27,6 +27,9 @@ jobs:
         run: |
           mkdir -p artifacts/validation
           dotnet run --project tests/Scribe.Core.Tests -c Release 2>&1 | tee artifacts/validation/core.log
+      - name: Compile independent Avalonia controls
+        if: success() || failure()
+        run: dotnet build src/Scribe.Avalonia -c Release 2>&1 | tee artifacts/validation/controls.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

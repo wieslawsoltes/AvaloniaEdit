@@ -22,6 +22,7 @@ public sealed class EditSession : IDisposable
         Document=document??new(); Document.Changed+=DocumentChanged; Document.StateChanged+=StateChanged;
         if(Document.Snapshot.LineCount>1) { var line=Document.Snapshot.GetLine(0); NewLine=Document.Snapshot.GetText(line.End,line.DelimiterLength); }
     }
+    public void Select(Selection selection)=>Select([selection]);
     public void Select(params Selection[] selections)
     {
         ObjectDisposedException.ThrowIf(_disposed,this); Document.BreakUndoGroup(); SetSelections(selections); Changed?.Invoke(this,EventArgs.Empty);
@@ -42,7 +43,7 @@ public sealed class EditSession : IDisposable
         if(normalized.Count>4096) throw new ArgumentException("Maximum 4096 selections.");
         _selections=normalized.Count==0?[Selection.At(0)]:normalized.ToArray();
     }
-    public void SelectAll()=>Select(new(0,Document.Length));
+    public void SelectAll()=>Select(new Selection(0,Document.Length));
     public string SelectedText(string separator="\n")=>string.Join(separator,_selections.Select(s=>Document.Snapshot.GetText(s.Start,s.Length)));
     public void Insert(string text,bool typing=false)
     {
@@ -120,7 +121,7 @@ public sealed class EditSession : IDisposable
         while(a>0&&IsWord(b[a-1])) a=GraphemeBoundary(b,a,-1);
         while(z<b.Length&&IsWord(b[z])) z=GraphemeBoundary(b,z,1);
         if(a==z) z=GraphemeBoundary(b,z,1);
-        Select(new(a,z));
+        Select(new Selection(a,z));
     }
     public IReadOnlyList<int> SelectedLines()
     {
