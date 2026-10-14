@@ -1,0 +1,130 @@
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:c="using:ProText.Avalonia.Controls" xmlns:m="using:ProText.Avalonia" x:CompileBindings="True">
+  <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml"/>
+  <Styles.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="ProTextBackground">#111B29</SolidColorBrush>
+          <SolidColorBrush x:Key="ProTextPanel">#192536</SolidColorBrush>
+          <SolidColorBrush x:Key="ProTextBorder">#2B3A4F</SolidColorBrush>
+          <SolidColorBrush x:Key="ProTextForeground">#D5DEEE</SolidColorBrush>
+          <SolidColorBrush x:Key="ProTextMuted">#93A4BC</SolidColorBrush>
+          <SolidColorBrush x:Key="ProTextAccent">#A1B7FF</SolidColorBrush>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="ProTextBackground">#FFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="ProTextPanel">#F2F5FA</SolidColorBrush>
+          <SolidColorBrush x:Key="ProTextBorder">#DCE3ED</SolidColorBrush>
+          <SolidColorBrush x:Key="ProTextForeground">#243348</SolidColorBrush>
+          <SolidColorBrush x:Key="ProTextMuted">#5E7087</SolidColorBrush>
+          <SolidColorBrush x:Key="ProTextAccent">#4261B6</SolidColorBrush>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+      <ControlTheme x:Key="{x:Type c:ProTextEditor}" TargetType="c:ProTextEditor">
+        <Setter Property="Background" Value="{DynamicResource ProTextBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource ProTextForeground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ProTextBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontFamily" Value="Cascadia Code,Consolas,Menlo,monospace"/>
+        <Setter Property="Template">
+          <ControlTemplate x:DataType="c:ProTextEditor">
+            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+              <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+                <ContentPresenter Content="{TemplateBinding Header}"/>
+                <c:EditorSearchBar Grid.Row="1" Name="PART_SearchBar" IsVisible="{TemplateBinding IsSearchOpen}"/>
+                <Border Grid.Row="2" IsVisible="{TemplateBinding IsGoToOpen}" Background="{DynamicResource ProTextPanel}" Padding="10,6">
+                  <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="Go to line : column" VerticalAlignment="Center" FontSize="12"/>
+                    <TextBox Name="PART_GoToBox" Width="150" Text="{Binding GoToText, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" AutomationProperties.Name="Go to line"/>
+                    <TextBlock Text="Enter to jump · Esc to close" FontSize="11" VerticalAlignment="Center" Foreground="{DynamicResource ProTextMuted}"/>
+                  </StackPanel>
+                </Border>
+                <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ClipToBounds="True">
+                  <ContentPresenter Name="PART_EditorHost" Margin="6,8,2,8" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
+                  <c:EditorOverview Grid.Column="1" Width="64" Margin="0,8,4,8" IsVisible="{TemplateBinding ShowOverview}" Owner="{Binding RelativeSource={RelativeSource TemplatedParent}}"/>
+                </Grid>
+                <c:EditorStatusBar Grid.Row="4" IsVisible="{TemplateBinding ShowStatusBar}" PositionText="{TemplateBinding StatusText}" DocumentText="{TemplateBinding DocumentStatus}"/>
+                <ContentPresenter Grid.Row="5" Content="{TemplateBinding Footer}"/>
+              </Grid>
+            </Border>
+          </ControlTemplate>
+        </Setter>
+      </ControlTheme>
+      <ControlTheme x:Key="ProTextMinimalTheme" TargetType="c:ProTextEditor" BasedOn="{StaticResource {x:Type c:ProTextEditor}}">
+        <Setter Property="Template">
+          <ControlTemplate x:DataType="c:ProTextEditor">
+            <Border Background="{TemplateBinding Background}" BorderBrush="{DynamicResource ProTextAccent}" BorderThickness="2" CornerRadius="8">
+              <Grid RowDefinitions="Auto,*,Auto">
+                <c:EditorSearchBar Name="PART_SearchBar" IsVisible="{TemplateBinding IsSearchOpen}"/>
+                <ContentPresenter Name="PART_EditorHost" Grid.Row="1" Margin="16" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
+                <c:EditorStatusBar Grid.Row="2" PositionText="{TemplateBinding StatusText}" DocumentText="{TemplateBinding DocumentStatus}"/>
+              </Grid>
+            </Border>
+          </ControlTemplate>
+        </Setter>
+      </ControlTheme>
+      <ControlTheme x:Key="{x:Type c:EditorSearchBar}" TargetType="c:EditorSearchBar">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Template">
+          <ControlTemplate x:DataType="c:EditorSearchBar">
+            <Border Background="{DynamicResource ProTextPanel}" Padding="10,8" BorderBrush="{DynamicResource ProTextBorder}" BorderThickness="0,0,0,1" DataContext="{TemplateBinding Controller}">
+              <Grid x:DataType="m:EditorSearchController" RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto,Auto,Auto">
+                <TextBox Name="PART_Query" Text="{Binding Pattern, Mode=TwoWay}" PlaceholderText="Find in document" MinWidth="100" AutomationProperties.Name="Find text"/>
+                <Button Grid.Column="1" Content="↑" Margin="6,0,0,0" Command="{Binding PreviousCommand}" AutomationProperties.Name="Previous match"/>
+                <Button Grid.Column="2" Content="↓" Margin="4,0,0,0" Command="{Binding NextCommand}" AutomationProperties.Name="Next match"/>
+                <Button Grid.Column="3" Content="✕" Margin="4,0,0,0" Command="{Binding CloseCommand}" AutomationProperties.Name="Close search"/>
+                <TextBox Grid.Row="1" Text="{Binding Replacement, Mode=TwoWay}" PlaceholderText="Replace with" Margin="0,5,0,0" AutomationProperties.Name="Replacement text"/>
+                <Button Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Content="Replace" Margin="6,5,0,0" Command="{Binding ReplaceCommand}"/>
+                <Button Grid.Row="1" Grid.Column="3" Content="All" Margin="4,5,0,0" Command="{Binding ReplaceAllCommand}" AutomationProperties.Name="Replace all"/>
+                <WrapPanel Grid.Row="2" Grid.ColumnSpan="4" Margin="0,5,0,0" Orientation="Horizontal">
+                  <CheckBox Content="Case" IsChecked="{Binding MatchCase, Mode=TwoWay}" Margin="0,0,10,0"/>
+                  <CheckBox Content="Word" IsChecked="{Binding WholeWord, Mode=TwoWay}" Margin="0,0,10,0"/>
+                  <CheckBox Content="Regex" IsChecked="{Binding UseRegex, Mode=TwoWay}" Margin="0,0,10,0"/>
+                  <CheckBox Content="Selection" IsChecked="{Binding InSelection, Mode=TwoWay}" Margin="0,0,12,0"/>
+                  <TextBlock Text="{Binding Message}" VerticalAlignment="Center" Foreground="{DynamicResource ProTextMuted}" TextWrapping="Wrap"/>
+                </WrapPanel>
+              </Grid>
+            </Border>
+          </ControlTemplate>
+        </Setter>
+      </ControlTheme>
+      <ControlTheme x:Key="{x:Type c:EditorStatusBar}" TargetType="c:EditorStatusBar">
+        <Setter Property="Template">
+          <ControlTemplate x:DataType="c:EditorStatusBar">
+            <Border Background="{DynamicResource ProTextPanel}" BorderBrush="{DynamicResource ProTextBorder}" BorderThickness="0,1,0,0" Padding="12,6">
+              <Grid ColumnDefinitions="Auto,*">
+                <TextBlock Text="{TemplateBinding PositionText}" FontSize="11" Foreground="{DynamicResource ProTextMuted}"/>
+                <TextBlock Grid.Column="1" Text="{TemplateBinding DocumentText}" FontSize="11" Margin="16,0,0,0" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ProTextMuted}"/>
+              </Grid>
+            </Border>
+          </ControlTemplate>
+        </Setter>
+      </ControlTheme>
+      <ControlTheme x:Key="{x:Type c:TextDiffEditor}" TargetType="c:TextDiffEditor">
+        <Setter Property="Template">
+          <ControlTemplate x:DataType="c:TextDiffEditor">
+            <Grid RowDefinitions="Auto,Auto,*" Background="{DynamicResource ProTextBackground}">
+              <DockPanel Margin="12,8">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+                  <Button Content="Previous change" Command="{Binding PreviousCommand, RelativeSource={RelativeSource TemplatedParent}}"/>
+                  <Button Content="Next change" Command="{Binding NextCommand, RelativeSource={RelativeSource TemplatedParent}}"/>
+                </StackPanel>
+                <TextBlock Text="{TemplateBinding Summary}" VerticalAlignment="Center"/>
+              </DockPanel>
+              <Grid Grid.Row="1" ColumnDefinitions="*,*" Margin="12,0,12,8">
+                <TextBlock Text="ORIGINAL" Foreground="{DynamicResource ProTextMuted}" FontSize="11"/>
+                <TextBlock Grid.Column="1" Text="MODIFIED" Foreground="{DynamicResource ProTextMuted}" FontSize="11"/>
+              </Grid>
+              <Grid Grid.Row="2" ColumnDefinitions="*,5,*">
+                <ContentPresenter Name="PART_LeftHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
+                <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch"/>
+                <ContentPresenter Name="PART_RightHost" Grid.Column="2" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
+              </Grid>
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+      </ControlTheme>
+    </ResourceDictionary>
+  </Styles.Resources>
+</Styles>

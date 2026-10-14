@@ -1,0 +1,105 @@
+name: ProText validation
+on:
+  push:
+    branches: [feat/protext-controls]
+    paths: ['professional/**', '.github/workflows/protext-validate.yml']
+  pull_request:
+    paths: ['professional/**', '.github/workflows/protext-validate.yml']
+permissions:
+  contents: read
+concurrency:
+  group: protext-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: professional
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build desktop sample and reusable controls
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/validation
+          dotnet build samples/ProText.Desktop/ProText.Desktop.csproj -c Release 2>&1 | tee artifacts/validation/desktop-build.log
+      - name: Core and native headless regression tests
+        if: success() || failure()
+        run: |
+          set -euo pipefail
+          dotnet run --project tests/ProText.Tests/ProText.Tests.csproj -c Release 2>&1 | tee artifacts/validation/unit-tests.log
+      - name: Install WebAssembly workload
+        if: success() || failure()
+        run: dotnet workload install wasm-tools --skip-manifest-update
+      - name: Publish actual Avalonia browser sample
+        if: success() || failure()
+        run: |
+          set -euo pipefail
+          dotnet publish samples/ProText.Browser/ProText.Browser.csproj -c Release -o artifacts/browser 2>&1 | tee artifacts/validation/browser-build.log
+          find artifacts/browser -maxdepth 3 -name index.html -o -name main.js
+      - name: Browser interaction validation
+        if: success() || failure()
+        run: |
+          set -euo pipefail
+          python -m pip install playwright==1.64.0 pillow==12.0.0
+          python -m playwright install --with-deps chromium
+          python tools/browser_validate.py artifacts/browser 2>&1 | tee artifacts/validation/browser-tests.log
+      - name: Pack reusable libraries and validate isolated consumer
+        if: success() || failure()
+        run: |
+          set -euo pipefail
+          dotnet pack src/ProText.Core/ProText.Core.csproj -c Release -o artifacts/packages
+          dotnet pack src/ProText.Avalonia/ProText.Avalonia.csproj -c Release -o artifacts/packages
+          python tools/verify_packages.py
+      - name: Stage clean source and build identity
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/source artifacts/validation
+          git -C .. archive HEAD professional | tar -x -C artifacts/source --strip-components=1
+          git -C .. rev-parse HEAD > artifacts/validation/source-commit.txt
+          dotnet --info > artifacts/validation/dotnet-info.txt
+          printf '%s\n' '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}' > artifacts/validation/ci-run.txt
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+          root=Path('artifacts')
+          records=[]
+          for group in ('source','browser','packages'):
+              for path in sorted((root/group).rglob('*')):
+                  if path.is_file():
+                      records.append({'path':str(path.relative_to(root)),'bytes':path.stat().st_size,'sha256':hashlib.sha256(path.read_bytes()).hexdigest()})
+          (root/'validation/file-manifest.json').write_text(json.dumps({'commit':os.environ['GITHUB_SHA'],'files':records},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: protext-source
+          path: professional/artifacts/source
+          include-hidden-files: true
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: protext-browser
+          path: professional/artifacts/browser
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: protext-packages
+          path: professional/artifacts/packages
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: protext-validation
+          path: professional/artifacts/validation
+          retention-days: 14
