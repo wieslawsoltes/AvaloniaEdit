@@ -1,0 +1,57 @@
+name: ProText toolchain parts
+on:
+  push:
+    branches: [feat/protext-controls]
+    paths: [.github/workflows/protext-toolchain-parts.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '11913603136'
+          run-id: '38602110095'
+          github-token: ${{ github.token }}
+          path: toolchain
+          merge-multiple: true
+      - name: Split archive
+        run: |
+          set -euo pipefail
+          mkdir parts
+          tar -cf toolchain.tar -C toolchain .
+          sha256sum toolchain.tar > parts/SHA256SUMS.txt
+          split -b 384M -d -a 1 toolchain.tar parts/protext-part-
+          sha256sum parts/protext-part-* >> parts/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: protext-toolchain-part-0
+          path: parts/protext-part-0
+          compression-level: 0
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: protext-toolchain-part-1
+          path: parts/protext-part-1
+          compression-level: 0
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: protext-toolchain-part-2
+          path: parts/protext-part-2
+          compression-level: 0
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: protext-toolchain-part-3
+          path: parts/protext-part-3
+          compression-level: 0
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: protext-toolchain-checksums
+          path: parts/SHA256SUMS.txt
+          retention-days: 3
