@@ -33,8 +33,8 @@ public partial class MainView : UserControl
         Wire("FoldButton",()=>Editor.FoldAll(Editor.CollapsedLines.Count==0));
         this.FindControl<Button>("CompletionButton")!.Click+=async(_,_)=>{Editor.FocusEditor();await Editor.ShowCompletionAsync();};
         Wire("SnippetButton",()=>Editor.InsertSnippet("for (var ${1:i} = 0; $1 < ${2:10}; $1++)\n{\n    $0\n}"));
-        Wire("GoToButton",()=>{GoTo(this.FindControl<TextBox>("LineBox")!.Text??"1");});
-        this.FindControl<TextBox>("LineBox")!.KeyDown+=(_,e)=>{if(e.Key==Avalonia.Input.Key.Enter)GoTo(this.FindControl<TextBox>("LineBox")!.Text??"1");};
+        Wire("GoToButton",()=>GoTo(this.FindControl<TextBox>("LineBox")!.Text??"1"));
+        this.FindControl<TextBox>("LineBox")!.KeyDown+=(_,e)=>{if(e.Key==global::Avalonia.Input.Key.Enter)GoTo(this.FindControl<TextBox>("LineBox")!.Text??"1");};
         this.FindControl<CheckBox>("WrapCheck")!.IsCheckedChanged+=(_,_)=>Editor.WordWrap=this.FindControl<CheckBox>("WrapCheck")!.IsChecked==true;
         this.FindControl<CheckBox>("WhitespaceCheck")!.IsCheckedChanged+=(_,_)=>Editor.ShowWhitespace=this.FindControl<CheckBox>("WhitespaceCheck")!.IsChecked==true;
         this.FindControl<CheckBox>("ReadOnlyCheck")!.IsCheckedChanged+=(_,_)=>Editor.IsReadOnly=this.FindControl<CheckBox>("ReadOnlyCheck")!.IsChecked==true;

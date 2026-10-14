@@ -46,11 +46,13 @@ jobs:
           python -m pip install playwright==1.64.0 pillow==12.0.0
           python -m playwright install --with-deps chromium
           python tools/browser_validate.py artifacts/browser 2>&1 | tee artifacts/validation/browser.log
-      - name: Pack independent libraries
+      - name: Audit independent dependencies and package consumer
         if: success() || failure()
         run: |
+          python tools/verify_independence.py
           dotnet pack src/Scribe.Core -c Release -o artifacts/packages
           dotnet pack src/Scribe.Avalonia -c Release -o artifacts/packages
+          python tools/verify_packages.py
       - name: Stage clean standalone source and identity
         if: always()
         run: |
@@ -59,6 +61,24 @@ jobs:
           git -C .. rev-parse HEAD > artifacts/validation/commit.txt
           dotnet --info > artifacts/validation/dotnet-info.txt
           printf '%s\n' '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}' > artifacts/validation/ci-run.txt
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+          root=Path('artifacts')
+          files=[]
+          for group in ('source','browser','packages'):
+              for path in sorted((root/group).rglob('*')):
+                  if path.is_file():
+                      files.append({'path':str(path.relative_to(root)),'bytes':path.stat().st_size,'sha256':hashlib.sha256(path.read_bytes()).hexdigest()})
+          (root/'validation/file-manifest.json').write_text(json.dumps({'commit':os.environ['GITHUB_SHA'],'files':files},indent=2))
+          PY
+      - name: Verify source builds independently outside repository
+        if: success()
+        run: |
+          destination=$(mktemp -d)
+          cp -a artifacts/source/. "$destination/"
+          (cd "$destination" && dotnet run --project tests/Scribe.Core.Tests -c Release && dotnet run --project tests/Scribe.UI.Tests -c Release) 2>&1 | tee artifacts/validation/standalone-source-consumer.log
+          rm -rf "$destination"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
