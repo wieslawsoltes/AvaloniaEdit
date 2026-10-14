@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices.JavaScript;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
 using Scribe.Core;
 namespace Scribe.Browser;
@@ -15,11 +14,11 @@ public static partial class TestBridge
     [JSExport]
     public static string CompletionBounds()
     {
-        var list=View.Editor.GetLogicalDescendants().OfType<ListBox>().First(c=>c.Name=="PART_CompletionList"&&c.IsAttachedToVisualTree());
-        // Avalonia 12 popups can have a separate presentation root. TranslatePoint requires a
-        // common visual ancestor; screen/client conversion is the correct cross-root mapping.
-        var screen=list.PointToScreen(new global::Avalonia.Point(0,0));
-        var p=View.PointToClient(screen);
+        var root=TopLevel.GetTopLevel(View)??throw new InvalidOperationException("Gallery has no TopLevel.");
+        // Inspect the rendered tree, not a template's logical child which might belong to a detached popup.
+        var list=root.GetVisualDescendants().OfType<ListBox>().FirstOrDefault(c=>c.Name=="PART_CompletionList"&&c.Bounds.Width>0&&c.Bounds.Height>0);
+        if(list is null)throw new InvalidOperationException("No rendered completion list. Visual list boxes: "+string.Join(";",root.GetVisualDescendants().OfType<ListBox>().Select(c=>$"{c.Name}:{c.Bounds}")));
+        var p=list.TranslatePoint(new global::Avalonia.Point(0,0),View)??throw new InvalidOperationException("Rendered completion list has no common visual root with gallery.");
         return FormattableString.Invariant($"{{\"x\":{p.X},\"y\":{p.Y},\"width\":{list.Bounds.Width},\"height\":{list.Bounds.Height}}}");
     }
     [JSExport]

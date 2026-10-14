@@ -33,7 +33,13 @@ public partial class ScribeEditor
         }
         _completionPopup=e.NameScope.Find<Popup>("PART_CompletionPopup");
         _completionList=e.NameScope.Find<ListBox>("PART_CompletionList");
-        if(_completionPopup is not null) _completionPopup.PlacementTarget=Viewport;
+        if(_completionPopup is not null)
+        {
+            _completionPopup.PlacementTarget=Viewport;
+            // Completion belongs to this editor, not to an independent native window.
+            // Use the same overlay model on browser and desktop to keep focus and hit testing consistent.
+            _completionPopup.ShouldUseOverlayLayer=true;
+        }
         if(_completionList is not null)
         {
             _completionList.DoubleTapped+=CompleteDoubleTapped;
