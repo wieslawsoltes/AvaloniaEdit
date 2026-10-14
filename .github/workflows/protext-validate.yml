@@ -1,0 +1,32 @@
+name: ProText validation
+on:
+  push:
+    branches: [feat/protext-controls]
+    paths: ['professional/**', '.github/workflows/protext-validate.yml']
+  pull_request:
+    paths: ['professional/**', '.github/workflows/protext-validate.yml']
+permissions:
+  contents: read
+concurrency:
+  group: protext-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: professional
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build reusable controls
+        run: dotnet build src/ProText.Avalonia/ProText.Avalonia.csproj -c Release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: protext-source
+          path: professional
+          retention-days: 14
