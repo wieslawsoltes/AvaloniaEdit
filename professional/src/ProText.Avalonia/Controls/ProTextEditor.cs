@@ -109,6 +109,7 @@ public partial class ProTextEditor : TemplatedControl, IDisposable
         Editor.TextArea.TextEntered+=OnTextEntered;
         Editor.AddHandler(KeyDownEvent,OnEditorKeyDown,RoutingStrategies.Tunnel);
         Editor.AddHandler(PointerWheelChangedEvent,OnEditorWheel,RoutingStrategies.Tunnel);
+        ActualThemeVariantChanged+=OnThemeVariantChanged;
         _searchTimer=new DispatcherTimer { Interval=TimeSpan.FromMilliseconds(140) };
         _searchTimer.Tick+=(_,_)=>{ _searchTimer.Stop(); Search.Refresh(); };
         _analysisTimer=new DispatcherTimer { Interval=TimeSpan.FromMilliseconds(300) };
@@ -144,8 +145,9 @@ public partial class ProTextEditor : TemplatedControl, IDisposable
         if(change.Property==SessionProperty) SwitchSession();
         else if(change.Property==IsSearchOpenProperty) { if(IsSearchOpen) { Search.Refresh(); Dispatcher.UIThread.Post(()=>_searchBar?.FocusQuery()); } Redraw(); }
         else if(change.Property==IsGoToOpenProperty) { if(IsGoToOpen) Dispatcher.UIThread.Post(()=>{ _goToBox?.Focus(); _goToBox?.SelectAll(); }); }
-        else if(change.Property==IsReadOnlyProperty||change.Property==WordWrapProperty||change.Property==ShowLineNumbersProperty||change.Property==ShowWhitespaceProperty||change.Property==EnableFoldingProperty||change.Property==TabSizeProperty||change.Property==UseTabsProperty||change.Property==ZoomProperty||change.Property==FontSizeProperty||change.Property==FontFamilyProperty||change.Property==ForegroundProperty||change.Property==ActualThemeVariantProperty||change.Property==EditorThemeProperty) ApplyOptions();
+        else if(change.Property==IsReadOnlyProperty||change.Property==WordWrapProperty||change.Property==ShowLineNumbersProperty||change.Property==ShowWhitespaceProperty||change.Property==EnableFoldingProperty||change.Property==TabSizeProperty||change.Property==UseTabsProperty||change.Property==ZoomProperty||change.Property==FontSizeProperty||change.Property==FontFamilyProperty||change.Property==ForegroundProperty||change.Property==EditorThemeProperty) ApplyOptions();
     }
+    private void OnThemeVariantChanged(object? sender,EventArgs e)=>ApplyOptions();
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e); ObjectDisposedException.ThrowIf(_disposed,this); _attached=true;
@@ -228,7 +230,7 @@ public partial class ProTextEditor : TemplatedControl, IDisposable
     public void FocusEditor()=>Editor.TextArea.Focus();
     public void Dispose()
     {
-        if(_disposed) return; _disposed=true; _searchTimer.Stop(); _analysisTimer.Stop(); UnhookSession(); CancelCompletion(); CancelDiagnostics();
+        if(_disposed) return; _disposed=true; _searchTimer.Stop(); _analysisTimer.Stop(); UnhookSession(); CancelCompletion(); CancelDiagnostics(); ActualThemeVariantChanged-=OnThemeVariantChanged;
         if(_folding is not null) { FoldingManager.Uninstall(_folding); _folding=null; }
         if(_goToBox is not null) _goToBox.KeyDown-=OnGoToKey;
         if(_host is not null) _host.Content=null;

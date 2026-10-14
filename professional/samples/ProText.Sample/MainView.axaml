@@ -1,0 +1,77 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:c="using:ProText.Avalonia.Controls" x:Class="ProText.Sample.MainView" Background="{DynamicResource ProTextBackground}">
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <Border Padding="22,15" Background="{DynamicResource ProTextPanel}" BorderBrush="{DynamicResource ProTextBorder}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Orientation="Horizontal" Spacing="15">
+          <Border Background="#635BB8" CornerRadius="9" Width="38" Height="38"><TextBlock Text="T_" Foreground="White" FontWeight="Bold" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+          <StackPanel Spacing="3"><TextBlock Text="ProText" FontSize="21" FontWeight="SemiBold"/><TextBlock Text="AVALONIA EDITOR CONTROLS" Classes="muted" FontSize="10" LetterSpacing="1.5"/></StackPanel>
+        </StackPanel>
+        <Border Grid.Column="1" Background="{DynamicResource ProTextBackground}" BorderBrush="{DynamicResource ProTextBorder}" BorderThickness="1" CornerRadius="6" Padding="12,7" VerticalAlignment="Center">
+          <TextBlock Text="DESKTOP + WEBASSEMBLY" Classes="muted" FontSize="10" LetterSpacing="1"/>
+        </Border>
+      </Grid>
+    </Border>
+    <Border Grid.Row="1" Padding="16,8" Background="{DynamicResource ProTextPanel}" BorderBrush="{DynamicResource ProTextBorder}" BorderThickness="0,0,0,1">
+      <WrapPanel Orientation="Horizontal">
+        <Button Name="NewButton" Content="New" Margin="0,0,5,4"/>
+        <Button Name="OpenButton" Content="Open…" Margin="0,0,5,4"/>
+        <Button Name="SaveButton" Content="Save as…" Margin="0,0,14,4"/>
+        <Button Name="UndoButton" Content="Undo" Margin="0,0,5,4"/>
+        <Button Name="RedoButton" Content="Redo" Margin="0,0,14,4"/>
+        <Button Name="FindButton" Content="Find / replace" Margin="0,0,5,4"/>
+        <Button Name="GoToButton" Content="Go to" Margin="0,0,14,4"/>
+        <Button Name="SplitButton" Content="Split view" Margin="0,0,5,4"/>
+        <Button Name="ThemeButton" Content="Light / dark" Margin="0,0,5,4"/>
+        <Button Name="TemplateButton" Content="Swap template" Margin="0,0,5,4"/>
+      </WrapPanel>
+    </Border>
+    <Grid Name="Workspace" Grid.Row="2" ColumnDefinitions="220,*">
+      <Border Name="Sidebar" Background="{DynamicResource ProTextPanel}" BorderBrush="{DynamicResource ProTextBorder}" BorderThickness="0,0,1,0" Padding="12,18">
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+          <TextBlock Text="WORKSPACE" Classes="muted" FontSize="10" LetterSpacing="1.8" Margin="10,0,0,12"/>
+          <StackPanel Grid.Row="1" Spacing="2">
+            <Button Name="CodeButton" Classes="nav" Content="C#    Welcome.cs"/>
+            <Button Name="JsonButton" Classes="nav" Content="{ }    settings.json"/>
+            <Button Name="TextButton" Classes="nav" Content="¶     Notes.txt"/>
+            <Button Name="LargeButton" Classes="nav" Content="↧    100,000-line document"/>
+            <Button Name="DiffButton" Classes="nav" Content="⇄    Compare revisions"/>
+          </StackPanel>
+          <StackPanel Grid.Row="2" Margin="10,24,0,0" Spacing="4">
+            <TextBlock Text="EDITOR OPTIONS" Classes="muted" FontSize="10" LetterSpacing="1.8" Margin="0,0,0,8"/>
+            <CheckBox Name="WrapCheck" Content="Word wrap" FontSize="12"/>
+            <CheckBox Name="WhitespaceCheck" Content="Show whitespace" FontSize="12"/>
+            <CheckBox Name="ReadOnlyCheck" Content="Read only" FontSize="12"/>
+            <CheckBox Name="OverviewCheck" Content="Document overview" IsChecked="True" FontSize="12"/>
+            <Button Name="FoldButton" Content="Fold / unfold all" Margin="0,8,10,0"/>
+            <Button Name="CompleteButton" Content="Code completion" Margin="0,4,10,0"/>
+          </StackPanel>
+          <StackPanel Grid.Row="4" Margin="10,20,10,0" Spacing="8">
+            <TextBlock Text="BUILT FOR YOUR APPLICATION" FontSize="9" Classes="muted" TextWrapping="Wrap"/>
+            <TextBlock Text="Replace the chrome. Share a document. Keep your editing state." FontSize="12" Classes="muted" TextWrapping="Wrap"/>
+            <TextBlock Text="Ctrl/Cmd+F  Find&#10;Ctrl/Cmd+Space  Complete&#10;Ctrl/Cmd+G  Go to line&#10;F2  Next bookmark" FontSize="11" Classes="muted" LineHeight="20"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+      <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" Margin="16,14,16,10">
+        <Grid ColumnDefinitions="*,Auto" Margin="2,0,2,12">
+          <StackPanel Spacing="4"><TextBlock Name="DocumentTitle" Text="Welcome.cs" FontSize="17" FontWeight="SemiBold"/><TextBlock Name="DocumentSubtitle" Text="A real editor. A replaceable template. One shared document model." FontSize="11" Classes="muted" TextTrimming="CharacterEllipsis"/></StackPanel>
+          <TextBlock Grid.Column="1" Name="ModeLabel" Text="CODE EDITOR" VerticalAlignment="Center" Classes="muted" FontSize="10" Margin="10,0,0,0"/>
+        </Grid>
+        <Grid Grid.Row="1">
+          <Grid Name="Editors" ColumnDefinitions="*,0,0">
+            <c:ProTextEditor Name="PrimaryEditor"/>
+            <GridSplitter Name="SplitDivider" Grid.Column="1" HorizontalAlignment="Stretch" IsVisible="False"/>
+            <c:ProTextEditor Name="SecondaryEditor" Grid.Column="2" IsVisible="False" ShowOverview="False"/>
+          </Grid>
+          <c:TextDiffEditor Name="DiffView" IsVisible="False"/>
+        </Grid>
+        <Border Grid.Row="2" Margin="0,10,0,0" Padding="12,9" Background="{DynamicResource ProTextPanel}" CornerRadius="5">
+          <TextBlock Name="Information" Text="Ready · Ctrl/Cmd+Space opens completion. Click the overview to navigate." Classes="muted" FontSize="11" TextWrapping="Wrap"/>
+        </Border>
+      </Grid>
+    </Grid>
+    <Border Grid.Row="3" Background="{DynamicResource ProTextPanel}" Padding="20,6" BorderBrush="{DynamicResource ProTextBorder}" BorderThickness="0,1,0,0">
+      <Grid ColumnDefinitions="*,Auto"><TextBlock Text="ProText 0.1 · MIT · Avalonia 12" FontSize="10" Classes="muted"/><TextBlock Grid.Column="1" Name="RuntimeLabel" Text="Native Avalonia controls" FontSize="10" Classes="muted"/></Grid>
+    </Border>
+  </Grid>
+</UserControl>
