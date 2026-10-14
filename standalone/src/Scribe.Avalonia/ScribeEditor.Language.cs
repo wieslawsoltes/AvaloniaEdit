@@ -16,12 +16,12 @@ public partial class ScribeEditor
     public ICompletionProvider? CompletionProvider {get;set;}
     public IDiagnosticProvider? DiagnosticProvider {get;set;}
     private CancellationTokenSource? _completionCancellation,_diagnosticCancellation;
-    private Popup? _completionPopup;
+    private Control? _completionPopup;
     private ListBox? _completionList;
     private IReadOnlyList<Completion> _completionItems=[];
     private int _completionStart;
     private long _completionRevision;
-    public int CompletionCount=>_completionPopup?.IsOpen==true?_completionItems.Count:0;
+    public int CompletionCount=>_completionPopup?.IsVisible==true?_completionItems.Count:0;
     private void AttachCompletionTemplate(TemplateAppliedEventArgs e)
     {
         CloseCompletion();
@@ -31,15 +31,11 @@ public partial class ScribeEditor
             _completionList.RemoveHandler(InputElement.KeyDownEvent,CompletionKeyDown);
             _completionList.LostFocus-=CompletionLostFocus;
         }
-        _completionPopup=e.NameScope.Find<Popup>("PART_CompletionPopup");
+        // A template-defined in-control overlay: it remains in the same rendered/input tree
+        // as the editor. No native popup window or detached presentation root is involved.
+        _completionPopup=e.NameScope.Find<Control>("PART_CompletionPopup");
         _completionList=e.NameScope.Find<ListBox>("PART_CompletionList");
-        if(_completionPopup is not null)
-        {
-            _completionPopup.PlacementTarget=Viewport;
-            // Completion belongs to this editor, not to an independent native window.
-            // Use the same overlay model on browser and desktop to keep focus and hit testing consistent.
-            _completionPopup.ShouldUseOverlayLayer=true;
-        }
+        if(_completionPopup is not null)_completionPopup.IsVisible=false;
         if(_completionList is not null)
         {
             _completionList.DoubleTapped+=CompleteDoubleTapped;
@@ -118,10 +114,17 @@ public partial class ScribeEditor
                 _completionStart=start; _completionRevision=revision;
                 _completionList!.ItemsSource=_completionItems; _completionList.SelectedIndex=0;
                 var caret=Viewport.CaretRectangle;
-                _completionPopup!.Placement=PlacementMode.BottomEdgeAlignedLeft;
-                _completionPopup.HorizontalOffset=caret.X;
-                _completionPopup.VerticalOffset=caret.Bottom-Viewport.Bounds.Height;
-                _completionPopup.IsOpen=true; FocusEditor();
+                double width=Math.Min(340,Math.Max(1,Viewport.Bounds.Width-8));
+                _completionList.MaxHeight=Math.Min(220,Math.Max(24,Viewport.Bounds.Height-12));
+                _completionPopup!.Width=width;
+                _completionPopup.Margin=default;
+                _completionPopup.IsVisible=true;
+                _completionPopup.Measure(new Size(width,Math.Max(24,Viewport.Bounds.Height)));
+                double height=_completionPopup.DesiredSize.Height;
+                double left=Math.Clamp(caret.X,0,Math.Max(0,Viewport.Bounds.Width-width));
+                double top=caret.Bottom+height<=Viewport.Bounds.Height?caret.Bottom:Math.Max(0,caret.Top-height);
+                _completionPopup.Margin=new Thickness(left,top,0,0);
+                FocusEditor();
             });
         }
         catch(OperationCanceledException) { }
@@ -152,7 +155,8 @@ public partial class ScribeEditor
     public void CloseCompletion()
     {
         _completionCancellation?.Cancel(); _completionCancellation?.Dispose(); _completionCancellation=null;
-        if(_completionPopup is not null) _completionPopup.IsOpen=false; _completionItems=[];
+        if(_completionPopup is not null)_completionPopup.IsVisible=false;
+        _completionItems=[];
     }
     private void CancelDiagnostics() {_diagnosticCancellation?.Cancel(); _diagnosticCancellation?.Dispose(); _diagnosticCancellation=null;}
 }

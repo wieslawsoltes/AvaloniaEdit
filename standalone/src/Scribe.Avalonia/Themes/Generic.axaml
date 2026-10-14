@@ -44,17 +44,16 @@
                   <ContentPresenter Name="PART_ViewportHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
                   <s:EditorOverview Grid.Column="1" Width="60" Margin="5,0" IsVisible="{TemplateBinding ShowOverview}" Owner="{Binding RelativeSource={RelativeSource TemplatedParent}}"/>
                   <ScrollBar Grid.Column="2" Name="PART_VerticalScrollBar" Orientation="Vertical" Width="14"/>
+                  <Border Name="PART_CompletionPopup" IsVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top"
+                          Background="{DynamicResource ScribePanel}" BorderBrush="{DynamicResource ScribeAccent}" BorderThickness="1" CornerRadius="5" Padding="4">
+                    <ListBox Name="PART_CompletionList" MaxHeight="220">
+                      <ListBox.ItemTemplate><DataTemplate x:DataType="c:Completion"><StackPanel Margin="5,2" Spacing="3"><TextBlock Text="{Binding Label}"/><TextBlock Text="{Binding Description}" FontSize="11" Foreground="{DynamicResource ScribeMuted}" TextWrapping="Wrap"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
+                    </ListBox>
+                  </Border>
                 </Grid>
                 <ScrollBar Grid.Row="3" Name="PART_HorizontalScrollBar" Orientation="Horizontal" Height="14"/>
                 <s:EditorStatusBar Grid.Row="4" Text="{TemplateBinding Status}" IsVisible="{TemplateBinding ShowStatusBar}"/>
                 <ContentPresenter Grid.Row="5" Content="{TemplateBinding Footer}"/>
-                <Popup Name="PART_CompletionPopup" IsLightDismissEnabled="False">
-                  <Border Background="{DynamicResource ScribePanel}" BorderBrush="{DynamicResource ScribeAccent}" BorderThickness="1" CornerRadius="5" Padding="4">
-                    <ListBox Name="PART_CompletionList" MinWidth="250" MaxWidth="460" MaxHeight="220">
-                      <ListBox.ItemTemplate><DataTemplate x:DataType="c:Completion"><StackPanel Margin="5,2" Spacing="3"><TextBlock Text="{Binding Label}"/><TextBlock Text="{Binding Description}" FontSize="11" Foreground="{DynamicResource ScribeMuted}" TextWrapping="Wrap"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
-                    </ListBox>
-                  </Border>
-                </Popup>
               </Grid>
             </Border>
           </ControlTemplate>
